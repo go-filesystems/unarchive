@@ -41,7 +41,7 @@ func TestSniffReadsTheBytesNotTheName(t *testing.T) {
 		{"shorter than any magic", []byte{'P'}, FormatUnknown},
 		{"empty", nil, FormatUnknown},
 	} {
-		got, err := Sniff(bytes.NewReader(c.head))
+		got, err := Sniff(bytes.NewReader(c.head), int64(len(c.head)))
 		if c.want == FormatUnknown {
 			if !errors.Is(err, ErrUnknownFormat) {
 				t.Errorf("%s: err = %v, want ErrUnknownFormat", c.name, err)
@@ -85,7 +85,7 @@ func TestRAR5IsNotReadAsRAR4(t *testing.T) {
 			"is claimed by the RAR4 rule")
 	}
 	// And the whole thing, through the door a caller uses.
-	if got, err := Sniff(bytes.NewReader(rar5)); err != nil || got != FormatRAR {
+	if got, err := Sniff(bytes.NewReader(rar5), int64(len(rar5))); err != nil || got != FormatRAR {
 		t.Errorf("Sniff(RAR5) = %q, %v", got, err)
 	}
 }
