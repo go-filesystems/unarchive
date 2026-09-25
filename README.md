@@ -31,6 +31,11 @@ unarchive -o disc.7z disc.iso     # yes, that works
 | SquashFS | ✅ | likewise, through `go-filesystems/squashfs` |
 | plakar `.ptar` | recognised, not unpacked | and the reason is below |
 
+A **numbered split** — `film.zip.001`, `.002`, … — is read as one file, whatever
+the format inside it, so `unarchive film.zip.001` works and extracts into `film/`.
+RAR is the exception: its own volume sets are followed by number already, and a
+plain numbered split of a RAR is a different thing this has no entry point for.
+
 ### Written
 
 `.tar`, `.tar.gz`, `.tgz`, `.tar.xz`, `.txz`, `.tar.zst`, `.tzst`, `.tar.lz4`,
