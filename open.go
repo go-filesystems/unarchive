@@ -122,6 +122,25 @@ func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 		// usually a tar, sometimes a single ordinary file, occasionally another
 		// archive entirely. openCompressed peels it and asks again.
 		return openCompressed(path, format, depth)
+	case FormatAr, FormatCpio:
+		// Both are contiguous and uncompressed, like tar, so they get the same
+		// treatment: index once, then a read is a read. The file stays open
+		// behind the index.
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, format, err
+		}
+		size, err := f.Seek(0, io.SeekEnd)
+		if err != nil {
+			f.Close()
+			return nil, format, err
+		}
+		fsys, err := openContiguous(f, size, f, format)
+		if err != nil {
+			f.Close()
+			return nil, format, fmt.Errorf("%s: %w", path, err)
+		}
+		return fsys, format, nil
 	case FormatRAR:
 		fsys, err := rar.Open(path)
 		if err != nil {
@@ -245,8 +264,8 @@ func openSplit(parts []string) (filesystem.Filesystem, Format, error) {
 			modes[zf.Name] = zf.FileInfo().Mode()
 		}
 		return &closerFS{Filesystem: FromFSWithModes(zr, modes), closer: j}, format, nil
-	case FormatTar:
-		fsys, err := openTar(j, j.Size(), j)
+	case FormatTar, FormatAr, FormatCpio:
+		fsys, err := openContiguous(j, j.Size(), j, format)
 		if err != nil {
 			return fail(err)
 		}
@@ -259,4 +278,18 @@ func openSplit(parts []string) (filesystem.Filesystem, Format, error) {
 		return &closerFS{Filesystem: fsys, closer: j}, format, nil
 	}
 	return fail(fmt.Errorf("%s across %d parts: %w", format, len(parts), ErrNotImplemented))
+}
+
+// openContiguous indexes one of the formats whose entries sit whole and
+// uncompressed in the file.
+func openContiguous(ra io.ReaderAt, size int64, closer io.Closer, format Format) (filesystem.Filesystem, error) {
+	switch format {
+	case FormatAr:
+		return openAr(ra, size, closer)
+	case FormatCpio:
+		return openCpio(ra, size, closer)
+	case FormatTar:
+		return openTar(ra, size, closer)
+	}
+	return nil, fmt.Errorf("%s: %w", format, ErrNotImplemented)
 }

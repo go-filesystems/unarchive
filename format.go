@@ -40,6 +40,8 @@ const (
 	FormatZIP     Format = "zip"   // PKZIP, including the jar/epub/odf family
 	Format7z      Format = "7z"    // 7-Zip
 	FormatTar     Format = "tar"   // POSIX tar: v7, USTAR, PAX and GNU alike
+	FormatAr      Format = "ar"    // the static-library and .deb container
+	FormatCpio    Format = "cpio"  // an initramfs, and an RPM's payload
 	FormatGzip    Format = "gzip"  // a stream wrapper, usually around a tar
 	FormatBzip2   Format = "bzip2" // likewise
 	FormatXZ      Format = "xz"    // likewise
@@ -102,6 +104,13 @@ var signatures = []signature{
 	// driver rather than guessed from the extension, which is the whole doctrine
 	// of this file and would have got it wrong here.
 	{FormatPtar, 0, []byte("_PLATAR_")},
+	{FormatAr, 0, []byte("!<arch>\n")},
+	// cpio's three ASCII variants. The fourth, "old binary", puts a 16-bit magic
+	// in the writer's own byte order -- the same file meaning different things on
+	// different machines -- so it is not listed and openCpio says why.
+	{FormatCpio, 0, []byte("070701")},
+	{FormatCpio, 0, []byte("070702")},
+	{FormatCpio, 0, []byte("070707")},
 	// tar carries no magic at the start: its identity sits 257 bytes in, which
 	// is why a tar is so often guessed at by extension instead of read.
 	{FormatTar, 257, []byte("ustar")},
