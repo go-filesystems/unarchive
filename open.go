@@ -4,7 +4,10 @@
 package unarchive
 
 import (
+	"archive/zip"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	filesystem "github.com/go-filesystems/interface"
@@ -31,6 +34,15 @@ func Open(path string) (filesystem.Filesystem, Format, error) {
 		return nil, format, closeErr
 	}
 	switch format {
+	case FormatZIP:
+		// archive/zip answers io/fs.FS, so the driver is an adaptation rather
+		// than a decoder: see FromFS. The reader holds the file open, so the
+		// closer goes with it.
+		zr, err := zip.OpenReader(path)
+		if err != nil {
+			return nil, format, fmt.Errorf("%s: %w", path, err)
+		}
+		return &closerFS{Filesystem: FromFS(zr), closer: zr}, format, nil
 	case FormatRAR:
 		fsys, err := rar.Open(path)
 		if err != nil {
@@ -42,4 +54,35 @@ func Open(path string) (filesystem.Filesystem, Format, error) {
 		// not know what this is" and sends a person somewhere else.
 		return nil, format, fmt.Errorf("%s: %s: %w", path, format, ErrNotImplemented)
 	}
+}
+
+// closerFS carries a decoder's own Close alongside the adapted filesystem: the
+// adapter has nothing to close, and whatever opened the file does.
+//
+// ⛔ It forwards OpenFile BY HAND, and that is not decoration. Embedding a
+// filesystem.Filesystem narrows the value to that interface, and every optional
+// capability the interface does not name -- Opener first among them -- stops
+// being reachable through the wrapper. Extract asks for Opener and got "this
+// filesystem hands out no file handles" from a filesystem that hands them out
+// perfectly well. A capability lost this way says nothing: the type assertion
+// simply fails.
+type closerFS struct {
+	filesystem.Filesystem
+	closer io.Closer
+}
+
+// OpenFile keeps the Opener capability reachable through the wrapper.
+func (c *closerFS) OpenFile(p string) (filesystem.File, error) {
+	o, ok := c.Filesystem.(filesystem.Opener)
+	if !ok {
+		return nil, errors.New("unarchive: the wrapped filesystem hands out no file handles")
+	}
+	return o.OpenFile(p)
+}
+
+func (c *closerFS) Close() error {
+	if err := c.Filesystem.Close(); err != nil {
+		return err
+	}
+	return c.closer.Close()
 }
