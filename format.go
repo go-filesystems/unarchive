@@ -55,6 +55,8 @@ const (
 	// two, on purpose.
 	FormatISO9660  Format = "iso9660"
 	FormatSquashFS Format = "squashfs"
+	// Recognised and deliberately not unpacked. See Format.Note.
+	FormatPtar Format = "ptar"
 )
 
 // Why brotli is not here. It has no signature: a brotli stream begins with the
@@ -96,6 +98,10 @@ var signatures = []signature{
 	{FormatZIP, 0, []byte("PK\x07\x08")}, // spanned
 	{FormatGzip, 0, []byte{0x1F, 0x8B}},
 	{FormatBzip2, 0, []byte("BZh")},
+	// ⛔ The magic is _PLATAR_, not _PTAR_. Read out of PlakarKorp's own storage
+	// driver rather than guessed from the extension, which is the whole doctrine
+	// of this file and would have got it wrong here.
+	{FormatPtar, 0, []byte("_PLATAR_")},
 	// tar carries no magic at the start: its identity sits 257 bytes in, which
 	// is why a tar is so often guessed at by extension instead of read.
 	{FormatTar, 257, []byte("ustar")},
@@ -147,6 +153,22 @@ func Sniff(r io.ReaderAt, size int64) (Format, error) {
 		// because "unknown" would be false and unhelpful in the same breath.
 		return FormatUnknown, fmt.Errorf("%s: %w", t, ErrNotImplemented)
 	}
+}
+
+// Note returns a sentence about a format this package recognises and does not
+// unpack, or "" for the rest.
+//
+// It exists because "recognised, not read yet" is true of ptar and MISLEADING
+// on its own: it suggests somebody will get round to it. What a .ptar is makes
+// that the wrong expectation, and the person holding one is better served by
+// being told which tool opens it than by waiting.
+func (f Format) Note() string {
+	if f == FormatPtar {
+		return "a plakar Kloset archive: a content-addressed repository of " +
+			"snapshots and deduplicated chunks, encrypted unless it was made " +
+			"with -plaintext. Open it with plakar, which has the key"
+	}
+	return ""
 }
 
 // Image says whether a format is a filesystem image rather than an archive.
