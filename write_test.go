@@ -63,10 +63,11 @@ func source(t *testing.T) (path string, want map[string]string) {
 // Undoing the wrapper explicitly is also a better witness: it checks the two
 // layers separately, so a broken wrapper and a broken tar cannot be confused.
 var decompressors = map[Format][]string{
-	FormatGzip: {"gzip", "-dc"},
-	FormatXZ:   {"xz", "-dc"},
-	FormatZstd: {"zstd", "-dqc"},
-	FormatLZ4:  {"lz4", "-dqc"},
+	FormatGzip:  {"gzip", "-dc"},
+	FormatXZ:    {"xz", "-dc"},
+	FormatZstd:  {"zstd", "-dqc"},
+	FormatLZ4:   {"lz4", "-dqc"},
+	FormatBzip2: {"bzip2", "-dc"},
 }
 
 // extractors are the SYSTEM tools that judge each target format. Reading our
@@ -135,7 +136,7 @@ func run(t *testing.T, tool string, args ...string) {
 func TestAnArchiveIsRewrittenOnlyAtTheSeal(t *testing.T) {
 	for _, target := range []string{
 		"out.tar", "out.tar.gz", "out.tgz", "out.tar.xz", "out.tar.zst",
-		"out.tar.lz4", "out.zip", "out.7z",
+		"out.tar.lz4", "out.tar.bz2", "out.tbz2", "out.zip", "out.7z",
 	} {
 		t.Run(target, func(t *testing.T) {
 			archive, base := source(t)
@@ -256,9 +257,13 @@ func TestTargetForNamesWhatItCannotWrite(t *testing.T) {
 		{"out.zip", FormatZIP, FormatUnknown, nil},
 		{"out.jar", FormatZIP, FormatUnknown, nil},
 		{"out.7z", Format7z, FormatUnknown, nil},
+		{"out.tar.bz2", FormatTar, FormatBzip2, nil},
+		{"out.tbz2", FormatTar, FormatBzip2, nil},
+		{"out.tbz", FormatTar, FormatBzip2, nil},
+		{"out.bz2", FormatTar, FormatBzip2, nil},
+		// The only format left that is read and not written, and the only one
+		// whose reason will not change here: no free writer exists.
 		{"out.rar", FormatRAR, FormatUnknown, ErrCannotWrite},
-		{"out.tar.bz2", FormatTar, FormatBzip2, ErrCannotWrite},
-		{"out.tbz", FormatTar, FormatBzip2, ErrCannotWrite},
 		{"out.iso", FormatUnknown, FormatUnknown, ErrUnknownFormat},
 		{"out", FormatUnknown, FormatUnknown, ErrUnknownFormat},
 	} {

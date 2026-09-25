@@ -4,6 +4,7 @@ go 1.26.4
 
 require (
 	github.com/bodgit/sevenzip v1.6.5
+	github.com/go-compressions/bzip2 v0.1.0
 	github.com/go-filesystems/interface v0.3.0
 	github.com/go-filesystems/overlay v0.2.0
 	github.com/go-filesystems/rar v0.0.0-20260924203345-10aeb171a8fe

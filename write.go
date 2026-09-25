@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	gobzip2 "github.com/go-compressions/bzip2"
 	"github.com/go-filesystems/overlay"
 	szip "github.com/go-filesystems/sevenzip"
 	"github.com/klauspost/compress/zstd"
@@ -26,10 +27,14 @@ import (
 // ErrCannotWrite is returned for a format this package reads and does not write.
 //
 // A third sentence alongside the other two: "I know what this is, I can read it,
-// and I cannot produce one". RAR has no free writer, and bzip2 has a decompressor
-// in the standard library and no compressor anywhere in this module's
-// dependencies. Saying which of those it is beats a generic failure, because one
-// of them is a licensing fact and the other is a missing library.
+// and I cannot produce one". Only RAR is left in it, and for a reason that is not
+// going to change here: no free writer exists.
+//
+// bzip2 used to be in it too, because the standard library decompresses bzip2 and
+// nothing compressed it. That was a missing LIBRARY rather than a property of the
+// format, so the library was written -- go-compressions/bzip2 -- and the sentence
+// stopped being true. Worth saying, because the two reasons look identical from
+// the outside and only one of them is permanent.
 var ErrCannotWrite = errors.New("unarchive: this format is read but not written")
 
 // Writable opens an archive and returns it as a filesystem that can be CHANGED,
@@ -81,14 +86,15 @@ var writeSuffixes = []struct {
 	{".tar.xz", FormatTar, FormatXZ}, {".txz", FormatTar, FormatXZ},
 	{".tar.zst", FormatTar, FormatZstd}, {".tzst", FormatTar, FormatZstd},
 	{".tar.lz4", FormatTar, FormatLZ4},
+	{".tar.bz2", FormatTar, FormatBzip2}, {".tbz2", FormatTar, FormatBzip2},
+	{".tbz", FormatTar, FormatBzip2},
 	{".tar", FormatTar, FormatUnknown},
 	{".7z", Format7z, FormatUnknown},
 	{".zip", FormatZIP, FormatUnknown},
 	{".jar", FormatZIP, FormatUnknown},
+	{".bz2", FormatTar, FormatBzip2},
 	// Read but not written, named so the error can say which.
 	{".rar", FormatRAR, FormatUnknown},
-	{".tar.bz2", FormatTar, FormatBzip2}, {".tbz2", FormatTar, FormatBzip2},
-	{".tbz", FormatTar, FormatBzip2}, {".bz2", FormatTar, FormatBzip2},
 }
 
 // TargetFor says what to write into a file with this name.
@@ -104,12 +110,8 @@ func TargetFor(name string) (WriteTarget, error) {
 			continue
 		}
 		t := WriteTarget{Archive: s.archive, Wrapper: s.wrapper}
-		switch {
-		case s.archive == FormatRAR:
+		if s.archive == FormatRAR {
 			return t, fmt.Errorf("%s: rar: %w", name, ErrCannotWrite)
-		case s.wrapper == FormatBzip2:
-			return t, fmt.Errorf("%s: bzip2 (read only: no Go compressor here): %w",
-				name, ErrCannotWrite)
 		}
 		return t, nil
 	}
@@ -222,6 +224,9 @@ func compressor(f Format, w io.Writer) (io.Writer, func() error, error) {
 		return z, z.Close, nil
 	case FormatLZ4:
 		z := lz4.NewWriter(w)
+		return z, z.Close, nil
+	case FormatBzip2:
+		z := gobzip2.NewWriter(w)
 		return z, z.Close, nil
 	}
 	return nil, nil, fmt.Errorf("%s: %w", f, ErrCannotWrite)
