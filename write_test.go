@@ -264,7 +264,10 @@ func TestTargetForNamesWhatItCannotWrite(t *testing.T) {
 		// The only format left that is read and not written, and the only one
 		// whose reason will not change here: no free writer exists.
 		{"out.rar", FormatRAR, FormatUnknown, ErrCannotWrite},
-		{"out.iso", FormatUnknown, FormatUnknown, ErrUnknownFormat},
+		{"out.a", FormatAr, FormatUnknown, nil},
+		{"out.deb", FormatAr, FormatUnknown, nil},
+		{"out.cpio", FormatCpio, FormatUnknown, nil},
+		{"out.iso", FormatISO9660, FormatUnknown, nil},
 		{"out", FormatUnknown, FormatUnknown, ErrUnknownFormat},
 	} {
 		got, err := TargetFor(c.name)

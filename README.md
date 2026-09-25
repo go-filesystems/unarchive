@@ -42,7 +42,21 @@ plain numbered split of a RAR is a different thing this has no entry point for.
 ### Written
 
 `.tar`, `.tar.gz`, `.tgz`, `.tar.xz`, `.txz`, `.tar.zst`, `.tzst`, `.tar.lz4`,
-`.tar.bz2`, `.tbz2`, `.tbz`, `.zip`, `.jar`, `.7z`.
+`.tar.bz2`, `.tbz2`, `.tbz`, `.zip`, `.jar`, `.7z`, `.a`, `.deb`, `.cpio`, `.iso`.
+
+`ar` is written in the **BSD** convention, not SysV — measured, not chosen: written
+SysV, `ar t` on macOS listed every member with its slash attached (`notes.txt/`)
+and `ar p archive notes.txt` then found nothing. BSD also needs no string table,
+which is why it streams: SysV puts long names in a `//` member that must *precede*
+every entry.
+
+`cpio` is written as **newc**, whose eight hex digits reach 4 GiB, rather than the
+octal `odc` whose six do not reach 8 MiB.
+
+⚠ An **`.iso`** holds every entry in memory while it is built. That is upstream's
+shape rather than a choice here: `iso9660.Builder.AddFile` takes a `[]byte`. And
+ISO 9660 without Rock Ridge or Joliet upper-cases names and cannot carry a long
+one — the builder writes neither extension.
 
 Not written: **RAR**, because no free writer exists, and **`.Z`**, because a new
 `.Z` is a file nobody should be making — `gzip`, `xz` and `zstd` all compress
