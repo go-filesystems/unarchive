@@ -7,6 +7,7 @@ import (
 	"archive/zip"
 	"errors"
 	"fmt"
+	"github.com/bodgit/sevenzip"
 	"io"
 	"os"
 
@@ -39,6 +40,18 @@ func Open(path string) (filesystem.Filesystem, Format, error) {
 		// than a decoder: see FromFS. The reader holds the file open, so the
 		// closer goes with it.
 		zr, err := zip.OpenReader(path)
+		if err != nil {
+			return nil, format, fmt.Errorf("%s: %w", path, err)
+		}
+		return &closerFS{Filesystem: FromFS(zr), closer: zr}, format, nil
+	case Format7z:
+		// sevenzip answers io/fs.FS as well, so the same adapter serves it. It
+		// also follows its OWN multi-volume chain when the name ends in .001 --
+		// and derives the next one by name, so the trap the rar driver exists to
+		// avoid is here too: text inserted before the extension breaks it. That
+		// is named in the README rather than papered over, because a reader that
+		// stops at volume one is how a file comes out the right length and wrong.
+		zr, err := sevenzip.OpenReader(path)
 		if err != nil {
 			return nil, format, fmt.Errorf("%s: %w", path, err)
 		}

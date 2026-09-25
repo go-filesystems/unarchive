@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"errors"
 	"os"
 	"path/filepath"
@@ -44,16 +45,31 @@ func TestThreeKindsOfNoAreThreeDifferentSentences(t *testing.T) {
 		t.Errorf("a plain file gave %v, want ErrUnknownFormat", err)
 	}
 
-	// 2. Recognised, not read yet. 7z's magic is enough to be known by.
-	sevenZip := filepath.Join(dir, "something.7z")
-	if err := os.WriteFile(sevenZip, []byte("7z\xbc\xaf\x27\x1cand then some"), 0o644); err != nil {
+	// 2. Recognised, not read yet -- and the fixture is VALID, because that is
+	// what this sentence is about. A truncated file would land in case 3 no
+	// matter which formats are wired.
+	//
+	// gzip is the format standing in for it today. When gzip is wired this row
+	// moves to whatever is still unread, and the test is coupled to the
+	// TAXONOMY rather than to the list -- which is the mistake it made twice: it
+	// used 7z, then a zip, and each became case 3 the day that format landed.
+	gz := filepath.Join(dir, "something.gz")
+	var gzBuf bytes.Buffer
+	zw := gzip.NewWriter(&gzBuf)
+	if _, err := zw.Write([]byte("a real stream, properly framed")); err != nil {
 		t.Fatal(err)
 	}
-	err := run([]string{sevenZip}, &out, &errOut)
-	if !errors.Is(err, unarchive.ErrNotImplemented) {
-		t.Errorf("a 7z gave %v, want ErrNotImplemented", err)
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
 	}
-	if err != nil && !strings.Contains(err.Error(), "7z") {
+	if err := os.WriteFile(gz, gzBuf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := run([]string{gz}, &out, &errOut)
+	if !errors.Is(err, unarchive.ErrNotImplemented) {
+		t.Errorf("a valid gzip gave %v, want ErrNotImplemented", err)
+	}
+	if err != nil && !strings.Contains(err.Error(), "gzip") {
 		t.Errorf("the error does not name the format: %v", err)
 	}
 
