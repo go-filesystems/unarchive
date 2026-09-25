@@ -84,6 +84,11 @@ var wrappers = []struct {
 	{FormatXZ, "fixture.tar.xz", "xz", []string{"-c"}},
 	{FormatZstd, "fixture.tar.zst", "zstd", []string{"-q", "-c"}},
 	{FormatLZ4, "fixture.tar.lz4", "lz4", []string{"-q", "-c"}},
+	// ⛔ -b 16 explicitly. This machine's compress(1) writes streams its own -d
+	// refuses at -b 9, -b 10 and -b 11 -- and exits 0 doing it -- so leaving the
+	// width to its default would be trusting a generator that is broken at three
+	// of its eight settings. See go-compressions/compress.
+	{FormatZ, "fixture.tar.Z", "compress", []string{"-b", "16", "-c"}},
 }
 
 // TestATarInsideEveryWrapperComesBackWhole.
@@ -240,6 +245,9 @@ func TestInnerName(t *testing.T) {
 		{"archive.tzst", "archive.tar"},
 		{"archive.tar.lz4", "archive.tar"},
 		{"film.mkv.zst", "film.mkv"},
+		{"archive.tar.Z", "archive.tar"},
+		{"archive.taz", "archive.tar"},
+		{"notes.txt.Z", "notes.txt"},
 		// A name that claims nothing still has to yield one, and reusing what
 		// the person typed beats inventing a name.
 		{"opaque", "opaque"},
@@ -356,5 +364,66 @@ func TestTheOpenerCapabilitySurvivesTheSpoolWrapper(t *testing.T) {
 	}
 	if string(buf) != want[skip:] {
 		t.Errorf("ReadAt(%d) = %q, want %q", skip, buf, want[skip:])
+	}
+}
+
+// TestADotZIsRecognisedAndNotConfusedWithGzip.
+//
+// Their magics differ by ONE byte -- 1F 8B against 1F 9D -- so a sniffer that
+// reads 0x1F and stops claims either for the other, and a .Z handed to a gzip
+// reader fails with a message about gzip. The two are asserted together for that
+// reason.
+func TestADotZIsRecognisedAndNotConfusedWithGzip(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		head []byte
+		want Format
+	}{
+		{"gzip", []byte{0x1F, 0x8B, 0x08, 0}, FormatGzip},
+		{"compress", []byte{0x1F, 0x9D, 0x90, 0}, FormatZ},
+		// One byte of shared prefix and nothing else is neither.
+		{"just 0x1F", []byte{0x1F}, FormatUnknown},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := Sniff(bytes.NewReader(c.head), int64(len(c.head)))
+			if c.want == FormatUnknown {
+				if err == nil {
+					t.Errorf("Sniff = %v, want a refusal", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Sniff: %v", err)
+			}
+			if got != c.want {
+				t.Errorf("Sniff = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestDotZIsReadAndNotWritten, which is a third sentence and not an oversight:
+// the reader exists, the writer deliberately does not, and the message says so
+// rather than leaving somebody to wonder when it will arrive.
+func TestDotZIsReadAndNotWritten(t *testing.T) {
+	if note := FormatZ.Note(); note == "" {
+		t.Error("FormatZ carries no note, so its absence from the writers reads as an oversight")
+	}
+	// ⛔ The first version of this test asserted ErrUnknownFormat, which is what
+	// the code did and what it should never have said: .Z is a format this package
+	// READS, so "the bytes match no format this knows" is false and unhelpful in
+	// one sentence. The test pinned the wrong sentence, and the smoke test through
+	// the built binary is what showed it.
+	for _, name := range []string{"out.tar.Z", "out.Z", "out.taz"} {
+		_, err := TargetFor(name)
+		if !errors.Is(err, ErrCannotWrite) {
+			t.Errorf("TargetFor(%q) = %v, want ErrCannotWrite", name, err)
+		}
+		if errors.Is(err, ErrUnknownFormat) {
+			t.Errorf("TargetFor(%q) calls .Z unknown, and it is read here: %v", name, err)
+		}
+		if err != nil && !strings.Contains(err.Error(), "compress(1)") {
+			t.Errorf("TargetFor(%q) does not say what .Z is: %v", name, err)
+		}
 	}
 }

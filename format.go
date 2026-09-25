@@ -47,6 +47,8 @@ const (
 	FormatXZ      Format = "xz"    // likewise
 	FormatZstd    Format = "zstd"  // likewise
 	FormatLZ4     Format = "lz4"   // likewise
+	// compress(1)'s .Z, read and not written -- see Format.Note.
+	FormatZ Format = "compress"
 	// Filesystem IMAGES, which are archives in every way that matters here: one
 	// file holding a tree, handed around to be unpacked. They are read through
 	// the org's own drivers rather than anything written here.
@@ -99,6 +101,9 @@ var signatures = []signature{
 	{FormatZIP, 0, []byte("PK\x05\x06")}, // an empty archive is still an archive
 	{FormatZIP, 0, []byte("PK\x07\x08")}, // spanned
 	{FormatGzip, 0, []byte{0x1F, 0x8B}},
+	// One byte apart from gzip's, which is why both are listed together: reading
+	// 0x1F and stopping would claim either for the other.
+	{FormatZ, 0, []byte{0x1F, 0x9D}},
 	{FormatBzip2, 0, []byte("BZh")},
 	// ⛔ The magic is _PLATAR_, not _PTAR_. Read out of PlakarKorp's own storage
 	// driver rather than guessed from the extension, which is the whole doctrine
@@ -172,6 +177,13 @@ func Sniff(r io.ReaderAt, size int64) (Format, error) {
 // that the wrong expectation, and the person holding one is better served by
 // being told which tool opens it than by waiting.
 func (f Format) Note() string {
+	if f == FormatZ {
+		// Says what the sentinel does not. "read but not written" already carries
+		// the fact; repeating it here made the message contradict its own
+		// brevity.
+		return "the LZW of compress(1). A new .Z is a file nobody should be " +
+			"making: gzip, xz and zstd all compress better and are read everywhere"
+	}
 	if f == FormatPtar {
 		return "a plakar Kloset archive: a content-addressed repository of " +
 			"snapshots and deduplicated chunks, encrypted unless it was made " +
@@ -198,7 +210,7 @@ func (f Format) Image() bool {
 // anything.
 func (f Format) Compressed() bool {
 	switch f {
-	case FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4:
+	case FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4, FormatZ:
 		return true
 	}
 	return false

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	dotz "github.com/go-compressions/compress"
 	filesystem "github.com/go-filesystems/interface"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -62,6 +63,15 @@ func decompressor(f Format, r io.Reader) (io.Reader, func() error, error) {
 		return z, func() error { z.Close(); return nil }, nil
 	case FormatLZ4:
 		return lz4.NewReader(r), nothing, nil
+	case FormatZ:
+		// The only wrapper whose reader refuses at CONSTRUCTION: it reads the
+		// three-byte header there, so a stream that is not .Z is caught here
+		// rather than at the first Read.
+		z, err := dotz.NewReader(r)
+		if err != nil {
+			return nil, nil, err
+		}
+		return z, nothing, nil
 	}
 	return nil, nil, fmt.Errorf("%s: %w", f, ErrUnknownFormat)
 }
@@ -79,7 +89,10 @@ var wrapperSuffixes = []struct{ from, to string }{
 	{".tar.xz", ".tar"}, {".txz", ".tar"},
 	{".tar.zst", ".tar"}, {".tzst", ".tar"},
 	{".tar.lz4", ".tar"},
+	{".tar.z", ".tar"}, {".taz", ".tar"},
 	{".gz", ""}, {".bz2", ""}, {".xz", ""}, {".zst", ""}, {".lz4", ""},
+	// Lower-cased before matching, so this catches the .Z everybody writes.
+	{".z", ""},
 }
 
 // InnerName is what the stream inside a compressed wrapper is called: the base

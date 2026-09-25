@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	github.com/bodgit/sevenzip v1.6.5
 	github.com/go-compressions/bzip2 v0.1.0
+	github.com/go-compressions/compress v0.1.1
 	github.com/go-filesystems/detect v0.1.0
 	github.com/go-filesystems/interface v0.3.0
 	github.com/go-filesystems/iso9660 v0.3.0

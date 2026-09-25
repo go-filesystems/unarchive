@@ -93,8 +93,16 @@ var writeSuffixes = []struct {
 	{".zip", FormatZIP, FormatUnknown},
 	{".jar", FormatZIP, FormatUnknown},
 	{".bz2", FormatTar, FormatBzip2},
-	// Read but not written, named so the error can say which.
+	// Read but not written, named so the error can say WHICH. Leaving them out
+	// entirely makes TargetFor answer ErrUnknownFormat -- "the bytes match no
+	// format this knows" for a format this package reads perfectly well, which is
+	// both false and unhelpful in one sentence.
 	{".rar", FormatRAR, FormatUnknown},
+	// ⛔ LOWER CASE. TargetFor lower-cases the name before matching, so ".Z" here
+	// never matches anything -- which is how the first attempt at this left the
+	// message unchanged while the table looked right.
+	{".tar.z", FormatTar, FormatZ}, {".taz", FormatTar, FormatZ},
+	{".z", FormatTar, FormatZ},
 }
 
 // TargetFor says what to write into a file with this name.
@@ -110,8 +118,14 @@ func TargetFor(name string) (WriteTarget, error) {
 			continue
 		}
 		t := WriteTarget{Archive: s.archive, Wrapper: s.wrapper}
-		if s.archive == FormatRAR {
+		switch {
+		case s.archive == FormatRAR:
 			return t, fmt.Errorf("%s: rar: %w", name, ErrCannotWrite)
+		case s.wrapper == FormatZ:
+			// General sentence first, specific one after -- the same order Open
+			// uses for a Note, and for the same reason: the other way round left
+			// the sentinel trailing after a paragraph that had said more.
+			return t, fmt.Errorf("%s: %w: %s", name, ErrCannotWrite, FormatZ.Note())
 		}
 		return t, nil
 	}

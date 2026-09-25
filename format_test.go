@@ -92,14 +92,33 @@ func TestRAR5IsNotReadAsRAR4(t *testing.T) {
 
 // TestCompressedNamesTheWrappers: a gzip holds ONE stream, which is usually a
 // tar and might be anything, so a caller has to know it is looking at a wrapper
-// before it can decide what to do next.
+// before it can decide what to do next. A format missing from Compressed() looks
+// like an archive to everything that asks.
+//
+// ⛔ It KEEPS THE COUNT now. The two lists held four wrappers and five others and
+// had drifted past lz4, .Z, ar, cpio, iso9660, squashfs and ptar -- seven formats
+// this asked nothing about, while reading as though it covered them. An ablation
+// that dropped .Z from Compressed() stayed green.
+//
+// A format added to the sniffer now lands in neither list, the count fails, and
+// somebody decides.
 func TestCompressedNamesTheWrappers(t *testing.T) {
-	for _, f := range []Format{FormatGzip, FormatBzip2, FormatXZ, FormatZstd} {
+	wrappers := []Format{FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4, FormatZ}
+	others := []Format{
+		FormatUnknown, FormatRAR, FormatZIP, Format7z, FormatTar, FormatAr,
+		FormatCpio, FormatISO9660, FormatSquashFS, FormatPtar,
+	}
+	const declared = 16 // every Format constant
+	if got := len(wrappers) + len(others); got != declared {
+		t.Errorf("%d formats accounted for, %d declared: one was added to the "+
+			"sniffer without anyone deciding whether it wraps a stream", got, declared)
+	}
+	for _, f := range wrappers {
 		if !f.Compressed() {
 			t.Errorf("%s is a stream wrapper and does not say so", f)
 		}
 	}
-	for _, f := range []Format{FormatRAR, FormatZIP, Format7z, FormatTar, FormatUnknown} {
+	for _, f := range others {
 		if f.Compressed() {
 			t.Errorf("%s is not a stream wrapper", f)
 		}
