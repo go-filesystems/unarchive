@@ -25,7 +25,10 @@ package unarchive
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
+
+	"github.com/go-filesystems/detect"
 )
 
 // Format is an archive format this package can recognise.
@@ -42,6 +45,16 @@ const (
 	FormatXZ      Format = "xz"    // likewise
 	FormatZstd    Format = "zstd"  // likewise
 	FormatLZ4     Format = "lz4"   // likewise
+	// Filesystem IMAGES, which are archives in every way that matters here: one
+	// file holding a tree, handed around to be unpacked. They are read through
+	// the org's own drivers rather than anything written here.
+	//
+	// The line is drawn at formats people DISTRIBUTE. You download an .iso and
+	// you ship a .squashfs; you do not pass somebody an ext4 image expecting them
+	// to unpack it. go-filesystems has drivers for a dozen more and this opens
+	// two, on purpose.
+	FormatISO9660  Format = "iso9660"
+	FormatSquashFS Format = "squashfs"
 )
 
 // Why brotli is not here. It has no signature: a brotli stream begins with the
@@ -88,11 +101,21 @@ var signatures = []signature{
 	{FormatTar, 257, []byte("ustar")},
 }
 
-// sniffLen is how much of a file Sniff needs.
+// sniffLen is how much of a file the archive signatures need.
 const sniffLen = 262
 
-// Sniff names the format of the archive in r, reading only its head.
-func Sniff(r io.ReaderAt) (Format, error) {
+// Sniff names the format of the archive or filesystem image in r.
+//
+// The size is needed for the image half and not for the archive half: an
+// archive's identity is in its first 262 bytes, while ISO 9660's is at offset
+// 32769 and a probe that deep has to know where the file ends, or a truncated
+// image turns into a read past the end.
+//
+// The image probing is go-filesystems/detect's, not a second table written here.
+// It is bounded through safeio, it handles both endiannesses of squashfs, and it
+// knows a dozen filesystems -- so duplicating the two entries this package opens
+// would mean re-deriving something deliberately hardened, and would drift from it.
+func Sniff(r io.ReaderAt, size int64) (Format, error) {
 	head := make([]byte, sniffLen)
 	n, err := r.ReadAt(head, 0)
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -108,7 +131,35 @@ func Sniff(r io.ReaderAt) (Format, error) {
 			return s.format, nil
 		}
 	}
-	return FormatUnknown, ErrUnknownFormat
+	// Nothing archival. It may still be an image, which is a different prober's
+	// question.
+	switch t, err := detect.Detect(r, size); {
+	case err != nil:
+		// detect's own "I do not know" is this package's, so the caller sees one
+		// sentinel rather than two that mean the same thing.
+		return FormatUnknown, ErrUnknownFormat
+	case t == detect.ISO9660:
+		return FormatISO9660, nil
+	case t == detect.SquashFS:
+		return FormatSquashFS, nil
+	default:
+		// A filesystem detect knows and this package does not open: say WHICH,
+		// because "unknown" would be false and unhelpful in the same breath.
+		return FormatUnknown, fmt.Errorf("%s: %w", t, ErrNotImplemented)
+	}
+}
+
+// Image says whether a format is a filesystem image rather than an archive.
+//
+// The distinction is not cosmetic: an image is already a filesystem, so there is
+// nothing to decode and nothing to spool -- Open hands back a driver reading the
+// file in place.
+func (f Format) Image() bool {
+	switch f {
+	case FormatISO9660, FormatSquashFS:
+		return true
+	}
+	return false
 }
 
 // Compressed says whether a format is a stream wrapper rather than an archive

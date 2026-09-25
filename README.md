@@ -15,6 +15,7 @@ unarchive -n suspicious.7z        # list, extract nothing
 
 unarchive -o film.7z film.rar     # convert, extracting nothing
 unarchive -o backup.tar.zst backup.zip
+unarchive -o disc.7z disc.iso     # yes, that works
 ```
 
 ## Formats
@@ -26,6 +27,8 @@ unarchive -o backup.tar.zst backup.zip
 | 7z | ✅ | follows its own `.001` chain, by name |
 | tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access |
 | gzip, bzip2, xz, zstd, lz4 | ✅ | stream wrappers: `.tar.gz`, `.tgz`, `.tar.zst`, a lone `notes.txt.gz` … |
+| ISO 9660 | ✅ | a disc image is an archive too — read through `go-filesystems/iso9660` |
+| SquashFS | ✅ | likewise, through `go-filesystems/squashfs` |
 
 ### Written
 
@@ -45,6 +48,20 @@ only one of them is permanent.
 with the first bits of its own data, so there is nothing to recognise it *by*.
 The only way to open one is to be told, by an extension or a flag, and this
 package decides from the bytes.
+
+## An image is an archive too
+
+A filesystem image is one file holding a tree, handed around to be unpacked —
+which is what an archive is, from the outside. So `.iso` and `.squashfs` open,
+list, extract and convert like any other input, and **nothing here decodes
+them**: `go-filesystems` already owns those drivers, and the detection is
+`go-filesystems/detect`'s hardened prober rather than a second magic table
+written here.
+
+The line is drawn at formats people **distribute**. You download an `.iso` and
+you ship a `.squashfs`; you do not hand somebody an ext4 image expecting them to
+unpack it. The org has drivers for a dozen more filesystems and this opens two,
+on purpose.
 
 ## Why the bytes and not the name
 

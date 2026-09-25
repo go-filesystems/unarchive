@@ -12,7 +12,9 @@ import (
 	"os"
 
 	filesystem "github.com/go-filesystems/interface"
+	"github.com/go-filesystems/iso9660"
 	"github.com/go-filesystems/rar"
+	"github.com/go-filesystems/squashfs"
 )
 
 // Open reads the archive at path, deciding what it is from its bytes, and
@@ -31,13 +33,28 @@ func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 	if err != nil {
 		return nil, FormatUnknown, err
 	}
-	format, err := Sniff(f)
-	closeErr := f.Close()
+	size, err := f.Seek(0, io.SeekEnd)
 	if err != nil {
+		f.Close()
+		return nil, FormatUnknown, err
+	}
+	format, err := Sniff(f, size)
+	if err != nil {
+		f.Close()
 		return nil, format, fmt.Errorf("%s: %w", path, err)
 	}
-	if closeErr != nil {
-		return nil, format, closeErr
+	// An image is read from the handle that is already open, so that one stays;
+	// every other driver is given the path and opens its own.
+	if format.Image() {
+		fsys, err := openImage(f, size, format)
+		if err != nil {
+			f.Close()
+			return nil, format, fmt.Errorf("%s: %w", path, err)
+		}
+		return fsys, format, nil
+	}
+	if err := f.Close(); err != nil {
+		return nil, format, err
 	}
 	switch format {
 	case FormatZIP:
@@ -136,4 +153,30 @@ func (c *closerFS) Close() error {
 		return err
 	}
 	return c.closer.Close()
+}
+
+// openImage hands a filesystem image to the org's driver for it.
+//
+// Nothing is decoded and nothing is spooled: an image already IS a filesystem, so
+// the driver reads the file in place. The handle outlives this call because the
+// driver adopts it -- both of these close what they were opened with.
+func openImage(f *os.File, size int64, format Format) (filesystem.Filesystem, error) {
+	var fsys filesystem.Filesystem
+	var err error
+	switch format {
+	case FormatISO9660:
+		fsys, err = iso9660.OpenReader(f, size)
+	case FormatSquashFS:
+		fsys, err = squashfs.OpenReader(f, size)
+	default:
+		return nil, fmt.Errorf("%s: %w", format, ErrNotImplemented)
+	}
+	if err != nil {
+		return nil, err
+	}
+	// ⛔ NOT wrapped in closerFS. Both drivers take ownership of an io.ReaderAt
+	// that is also an io.Closer and forward Close to it, so wrapping would close
+	// the file twice -- the second one failing with "file already closed", from
+	// Close, long after anything could be done about it.
+	return fsys, nil
 }
