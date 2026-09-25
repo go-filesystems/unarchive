@@ -242,3 +242,26 @@ func TestConvertWritesTheTargetAndRefusesWhatItCannot(t *testing.T) {
 		t.Errorf("two sources into one target gave %v, want a refusal", err)
 	}
 }
+
+// TestStemTakesAPartNumberOffToo.
+//
+// A part number sits OUTSIDE everything else, so it comes off first: film.zip.001
+// is a part of film.zip, and the directory should be film. Trimming one extension
+// leaves "film.zip" -- a directory named after the archive's own extension, which
+// is visibly wrong to whoever opens the folder.
+func TestStemTakesAPartNumberOffToo(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"film.zip.001", "film"},
+		{"film.zip.01", "film"},
+		{"backup.tar.gz.001", "backup"},
+		{"backup.7z.001", "backup"},
+		{"movie.part1.rar", "movie"},
+		// A single digit is not a part number: .1 is an extension people use.
+		{"notes.1", "notes"},
+		{"plain.zip", "plain"},
+	} {
+		if got := stem(c.in); got != c.want {
+			t.Errorf("stem(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

@@ -29,6 +29,17 @@ func Open(path string) (filesystem.Filesystem, Format, error) {
 
 // openAt is Open, carrying how many stream wrappers have already been peeled.
 func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
+	// A numbered set is read as ONE file, before anything looks at the bytes: the
+	// bytes of part one are the beginning of a whole archive and say nothing
+	// about the rest existing.
+	parts, err := splitParts(path)
+	if err != nil {
+		return nil, FormatUnknown, err
+	}
+	if len(parts) > 1 {
+		return openSplit(parts)
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, FormatUnknown, err
@@ -169,16 +180,7 @@ func (c *closerFS) Close() error {
 // the driver reads the file in place. The handle outlives this call because the
 // driver adopts it -- both of these close what they were opened with.
 func openImage(f *os.File, size int64, format Format) (filesystem.Filesystem, error) {
-	var fsys filesystem.Filesystem
-	var err error
-	switch format {
-	case FormatISO9660:
-		fsys, err = iso9660.OpenReader(f, size)
-	case FormatSquashFS:
-		fsys, err = squashfs.OpenReader(f, size)
-	default:
-		return nil, fmt.Errorf("%s: %w", format, ErrNotImplemented)
-	}
+	fsys, err := openImageAt(f, size, format)
 	if err != nil {
 		return nil, err
 	}
@@ -187,4 +189,74 @@ func openImage(f *os.File, size int64, format Format) (filesystem.Filesystem, er
 	// the file twice -- the second one failing with "file already closed", from
 	// Close, long after anything could be done about it.
 	return fsys, nil
+}
+
+// openImageAt is openImage over any reader, for a split where there is no single
+// file to hand over.
+func openImageAt(r io.ReaderAt, size int64, format Format) (filesystem.Filesystem, error) {
+	switch format {
+	case FormatISO9660:
+		return iso9660.OpenReader(r, size)
+	case FormatSquashFS:
+		return squashfs.OpenReader(r, size)
+	}
+	return nil, fmt.Errorf("%s: %w", format, ErrNotImplemented)
+}
+
+// openSplit reads a numbered set as one archive.
+//
+// Everything here is given an io.ReaderAt rather than a path, because a split has
+// no single path -- which is also why RAR is not among them: this package's rar
+// driver follows a volume set by NAME, deliberately, and a plain numbered split is
+// a different thing it has no entry point for. Saying so beats concatenating into
+// a spool the size of the whole set.
+func openSplit(parts []string) (filesystem.Filesystem, Format, error) {
+	j, err := openJoined(parts)
+	if err != nil {
+		return nil, FormatUnknown, err
+	}
+	format, err := Sniff(j, j.Size())
+	if err != nil {
+		j.Close()
+		return nil, format, fmt.Errorf("%s (%d parts): %w", parts[0], len(parts), err)
+	}
+	fail := func(err error) (filesystem.Filesystem, Format, error) {
+		j.Close()
+		return nil, format, fmt.Errorf("%s (%d parts): %w", parts[0], len(parts), err)
+	}
+	switch format {
+	case FormatZIP:
+		zr, err := zip.NewReader(j, j.Size())
+		if err != nil {
+			return fail(err)
+		}
+		modes := make(map[string]os.FileMode, len(zr.File))
+		for _, zf := range zr.File {
+			modes[zf.Name] = zf.Mode()
+		}
+		return &closerFS{Filesystem: FromFSWithModes(zr, modes), closer: j}, format, nil
+	case Format7z:
+		zr, err := sevenzip.NewReader(j, j.Size())
+		if err != nil {
+			return fail(err)
+		}
+		modes := make(map[string]os.FileMode, len(zr.File))
+		for _, zf := range zr.File {
+			modes[zf.Name] = zf.FileInfo().Mode()
+		}
+		return &closerFS{Filesystem: FromFSWithModes(zr, modes), closer: j}, format, nil
+	case FormatTar:
+		fsys, err := openTar(j, j.Size(), j)
+		if err != nil {
+			return fail(err)
+		}
+		return fsys, format, nil
+	case FormatISO9660, FormatSquashFS:
+		fsys, err := openImageAt(j, j.Size(), format)
+		if err != nil {
+			return fail(err)
+		}
+		return &closerFS{Filesystem: fsys, closer: j}, format, nil
+	}
+	return fail(fmt.Errorf("%s across %d parts: %w", format, len(parts), ErrNotImplemented))
 }
