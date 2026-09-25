@@ -43,6 +43,24 @@ func Open(path string) (filesystem.Filesystem, Format, error) {
 			return nil, format, fmt.Errorf("%s: %w", path, err)
 		}
 		return &closerFS{Filesystem: FromFS(zr), closer: zr}, format, nil
+	case FormatTar:
+		// A tar's entries are whole, uncompressed and contiguous, so an index
+		// buys REAL random access -- see openTar. The file stays open behind it.
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, format, err
+		}
+		st, err := f.Stat()
+		if err != nil {
+			f.Close()
+			return nil, format, err
+		}
+		fsys, err := openTar(f, st.Size(), f)
+		if err != nil {
+			f.Close()
+			return nil, format, fmt.Errorf("%s: %w", path, err)
+		}
+		return fsys, format, nil
 	case FormatRAR:
 		fsys, err := rar.Open(path)
 		if err != nil {
