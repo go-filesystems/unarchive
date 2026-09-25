@@ -76,6 +76,7 @@ func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 		if err != nil {
 			return nil, format, fmt.Errorf("%s: %w", path, err)
 		}
+		registerZipMethods(zr.RegisterDecompressor)
 		// The modes come from the zip's OWN headers, because the io/fs view
 		// reports every directory as 0555 -- see FromFSWithModes.
 		modes := make(map[string]os.FileMode, len(zr.File))
@@ -249,6 +250,7 @@ func openSplit(parts []string) (filesystem.Filesystem, Format, error) {
 		if err != nil {
 			return fail(err)
 		}
+		registerZipMethods(zr.RegisterDecompressor)
 		modes := make(map[string]os.FileMode, len(zr.File))
 		for _, zf := range zr.File {
 			modes[zf.Name] = zf.Mode()
