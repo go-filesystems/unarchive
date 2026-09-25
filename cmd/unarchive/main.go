@@ -8,9 +8,10 @@
 // entry is checked against the size its header declared -- because an extractor
 // that reports success is not the same as one that got everything.
 //
-//	unarchive film.part1.rar          # into ./film/
-//	unarchive -C /tmp/out film.rar    # into /tmp/out
-//	unarchive -n film.rar             # say what would happen, write nothing
+//	unarchive film.part1.rar           # into ./film/
+//	unarchive -C /tmp/out film.rar     # into /tmp/out
+//	unarchive -n film.rar              # say what would happen, write nothing
+//	unarchive -o film.7z film.rar      # convert, without extracting anything
 //
 // It is pure Go and needs nothing installed: the same binary runs everywhere Go
 // compiles.
@@ -44,11 +45,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 	force := fs.Bool("f", false, "replace files that are already there")
 	dry := fs.Bool("n", false, "say what would be extracted, write nothing")
 	quiet := fs.Bool("q", false, "say nothing but errors")
+	out := fs.String("o", "", "convert into this archive instead of extracting "+
+		"(.tar, .tar.gz, .tgz, .tar.xz, .tar.zst, .tar.lz4, .zip, .7z)")
 	fs.Usage = func() {
-		fmt.Fprint(stderr, "usage: unarchive [-C dir] [-f] [-n] [-q] archive...\n\n"+
+		fmt.Fprint(stderr, "usage: unarchive [-C dir] [-f] [-n] [-q] archive...\n"+
+			"       unarchive -o target archive\n\n"+
 			"Extracts an archive, deciding what it is from its bytes rather than its\n"+
 			"name, following a multi-volume set, and checking every entry against the\n"+
-			"size its header declares.\n\n")
+			"size its header declares.\n\n"+
+			"With -o it converts instead: nothing is extracted, and the target's\n"+
+			"format comes from its NAME, because an output file has no bytes yet.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -58,9 +64,53 @@ func run(args []string, stdout, stderr io.Writer) error {
 		fs.Usage()
 		return errors.New("name an archive")
 	}
+	if *out != "" {
+		// One target, so one source: two archives converted into the same file
+		// would silently leave only the second, and a flag that quietly discards
+		// an argument is worse than one that refuses it.
+		if fs.NArg() != 1 {
+			return fmt.Errorf("-o takes one archive, not %d", fs.NArg())
+		}
+		return convert(fs.Arg(0), *out, *force, *quiet, stdout)
+	}
 	for _, arg := range fs.Args() {
 		if err := one(arg, *dest, *force, *dry, *quiet, stdout); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// convert rewrites one archive as another format, without extracting it.
+//
+// Nothing is written until the seal, and the seal is a rename, so an
+// interruption leaves both the source and whatever the target held before
+// exactly as they were.
+func convert(arg, target string, force, quiet bool, stdout io.Writer) error {
+	// Asked FIRST, before any work: "I cannot write .rar" should arrive
+	// immediately, not after reading a 4 GiB archive.
+	t, err := unarchive.TargetFor(target)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(target); err == nil && !force {
+		return fmt.Errorf("%s is already there (use -f to replace it)", target)
+	}
+	o, format, err := unarchive.Writable(arg)
+	if err != nil {
+		return err
+	}
+	defer o.Close()
+	if !quiet {
+		fmt.Fprintf(stdout, "%s: %s -> %s: %s\n",
+			filepath.Base(arg), format, filepath.Base(target), t)
+	}
+	if err := unarchive.SealTo(o, target); err != nil {
+		return err
+	}
+	if !quiet {
+		if st, err := os.Stat(target); err == nil {
+			fmt.Fprintf(stdout, "  wrote %s (%s)\n", filepath.Base(target), humanSize(st.Size()))
 		}
 	}
 	return nil

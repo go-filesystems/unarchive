@@ -48,7 +48,13 @@ func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 		if err != nil {
 			return nil, format, fmt.Errorf("%s: %w", path, err)
 		}
-		return &closerFS{Filesystem: FromFS(zr), closer: zr}, format, nil
+		// The modes come from the zip's OWN headers, because the io/fs view
+		// reports every directory as 0555 -- see FromFSWithModes.
+		modes := make(map[string]os.FileMode, len(zr.File))
+		for _, f := range zr.File {
+			modes[f.Name] = f.Mode()
+		}
+		return &closerFS{Filesystem: FromFSWithModes(zr, modes), closer: zr}, format, nil
 	case Format7z:
 		// sevenzip answers io/fs.FS as well, so the same adapter serves it. It
 		// also follows its OWN multi-volume chain when the name ends in .001 --
@@ -60,7 +66,11 @@ func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 		if err != nil {
 			return nil, format, fmt.Errorf("%s: %w", path, err)
 		}
-		return &closerFS{Filesystem: FromFS(zr), closer: zr}, format, nil
+		modes := make(map[string]os.FileMode, len(zr.File))
+		for _, f := range zr.File {
+			modes[f.Name] = f.FileInfo().Mode()
+		}
+		return &closerFS{Filesystem: FromFSWithModes(zr, modes), closer: zr}, format, nil
 	case FormatTar:
 		// A tar's entries are whole, uncompressed and contiguous, so an index
 		// buys REAL random access -- see openTar. The file stays open behind it.

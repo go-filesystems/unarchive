@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strings"
 
 	filesystem "github.com/go-filesystems/interface"
 )
@@ -33,7 +34,37 @@ var ErrReadOnly = errors.New("unarchive: archive is read-only")
 // this adapter's.
 func FromFS(fsys iofs.FS) filesystem.Filesystem { return &fsWrap{fsys: fsys} }
 
-type fsWrap struct{ fsys iofs.FS }
+// FromFSWithModes is FromFS for an archive whose own metadata records modes the
+// io/fs view does not report.
+//
+// ⛔ It exists because both io/fs adapters here LOSE a directory's permissions.
+// archive/zip answers every directory with `fs.ModeDir | 0555` from its
+// synthesised fileListEntry, and bodgit/sevenzip does the same, whatever the
+// archive stored -- so a 0755 directory converted to tar came out dr-xr-xr-x,
+// and the extracted tree could not be deleted without a chmod. Measured, not
+// guessed: tar to tar kept 0755, zip to tar and 7z to tar both lost the owner's
+// write bit, which is what pointed at the adapters rather than at the writers.
+//
+// The map is keyed by path with no trailing slash. An entry whose recorded
+// permissions are ZERO is skipped rather than believed: some archives carry no
+// Unix mode at all, and a mode of 0 is the absence of a statement rather than a
+// statement that nobody may read the file.
+func FromFSWithModes(fsys iofs.FS, modes map[string]os.FileMode) filesystem.Filesystem {
+	kept := make(map[string]os.FileMode, len(modes))
+	for name, m := range modes {
+		if m.Perm() != 0 {
+			kept[strings.TrimSuffix(name, "/")] = m
+		}
+	}
+	return &fsWrap{fsys: fsys, modes: kept}
+}
+
+type fsWrap struct {
+	fsys iofs.FS
+	// modes overrides what the io/fs view reports, where the archive knows
+	// better. Nil for an fs.FS that is all there is.
+	modes map[string]os.FileMode
+}
 
 func (w *fsWrap) Close() error { return nil }
 
@@ -58,11 +89,18 @@ func (w *fsWrap) ListDir(dir string) ([]filesystem.DirEntry, error) {
 }
 
 func (w *fsWrap) Stat(p string) (filesystem.Stat, error) {
-	st, err := iofs.Stat(w.fsys, w.name(p))
+	name := w.name(p)
+	st, err := iofs.Stat(w.fsys, name)
 	if err != nil {
 		return nil, err
 	}
-	return filesystem.NewStat(posixMode(st.Mode()), uint64(st.Size()), 0), nil
+	mode := st.Mode()
+	// The archive's own record wins over the io/fs view, and only for the
+	// PERMISSION bits: the type comes from the view, which knows what it opened.
+	if m, ok := w.modes[strings.TrimPrefix(name, "./")]; ok {
+		mode = mode.Type() | m.Perm()
+	}
+	return filesystem.NewStat(posixMode(mode), uint64(st.Size()), 0), nil
 }
 
 // posixMode is the st_mode a Stat carries. os.FileMode keeps its type bits at

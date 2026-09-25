@@ -12,6 +12,9 @@ unarchive film.part1.rar          # into ./film/
 unarchive -C /tmp/out backup.tar.zst
 unarchive -f already-there.zip    # overwrite
 unarchive -n suspicious.7z        # list, extract nothing
+
+unarchive -o film.7z film.rar     # convert, extracting nothing
+unarchive -o backup.tar.zst backup.zip
 ```
 
 ## Formats
@@ -23,6 +26,18 @@ unarchive -n suspicious.7z        # list, extract nothing
 | 7z | ✅ | follows its own `.001` chain, by name |
 | tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access |
 | gzip, bzip2, xz, zstd, lz4 | ✅ | stream wrappers: `.tar.gz`, `.tgz`, `.tar.zst`, a lone `notes.txt.gz` … |
+
+### Written
+
+`.tar`, `.tar.gz`, `.tgz`, `.tar.xz`, `.txz`, `.tar.zst`, `.tzst`, `.tar.lz4`,
+`.zip`, `.jar`, `.7z`.
+
+Not written, and it says which and why rather than failing generically:
+
+| | |
+|---|---|
+| RAR | no free writer exists |
+| bzip2 | the standard library decompresses it and nothing here compresses it |
 
 **brotli is absent on purpose.** It has no signature: a brotli stream begins
 with the first bits of its own data, so there is nothing to recognise it *by*.
@@ -67,6 +82,36 @@ They send a person to three different places, which is why they are three
 errors. Nothing is in the middle bucket today; a count in the tests fails if a
 format is ever added to the sniffer alone, so that stays a decision rather than
 a default.
+
+## Changing an archive without rewriting it
+
+An archive can be opened as a filesystem you may **write to**, where the changes
+cost nothing until you say so:
+
+```go
+o, format, err := unarchive.Writable("backup.tar.zst")
+if err != nil { return err }
+defer o.Close()                  // discards the changes; writes nothing back
+
+o.WriteFile("etc/hosts", newHosts, 0o644)
+o.MkDir("etc/extra", 0o755)
+o.DeleteFile("var/log/old.log")
+
+err = unarchive.SealTo(o, "backup.7z")   // ONE rewrite, here
+```
+
+Renaming one entry in a 4 GiB archive costs a rename, not 4 GiB of rewriting.
+The archive underneath is untouched until `SealTo`, so abandoning the changes is
+free and an interrupted session leaves the original exactly as it was. `SealTo`
+builds the new archive **beside** the target and renames over it, so an
+interruption there leaves whatever the target held before, rather than half of
+something new.
+
+The target's format comes from its **name**. That is the one place in this
+package where a name decides anything, and it has to: an output file has no
+bytes yet to read.
+
+`unarchive -o` is this, with no changes: a conversion.
 
 ## As a filesystem
 

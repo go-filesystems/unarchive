@@ -8,6 +8,7 @@ import (
 	"compress/gzip"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -153,5 +154,91 @@ func TestStemTakesAWholeWrapperSuffixOff(t *testing.T) {
 		if got := stem(c.in); got != c.want {
 			t.Errorf("stem(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// TestConvertWritesTheTargetAndRefusesWhatItCannot.
+//
+// Four sentences the flag has to say, and each one is a different situation for
+// whoever typed it: it worked, the target exists, that format cannot be written,
+// and -o takes one archive.
+func TestConvertWritesTheTargetAndRefusesWhatItCannot(t *testing.T) {
+	bin, err := exec.LookPath("tar")
+	if err != nil {
+		t.Skip("no tar here to build the fixture with")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "notes.txt"), []byte("a body"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(dir, "source.tar")
+	cmd := exec.Command(bin, "-cf", archive, "-C", src, ".")
+	cmd.Env = append(os.Environ(), "COPYFILE_DISABLE=1")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fixture: %v\n%s", err, out)
+	}
+
+	var out, errOut bytes.Buffer
+	target := filepath.Join(dir, "converted.zip")
+	if err := run([]string{"-o", target, archive}, &out, &errOut); err != nil {
+		t.Fatalf("convert: %v\n%s", err, errOut.String())
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("the target was not written: %v", err)
+	}
+	// Judged by unzip, not by us.
+	if unzip, err := exec.LookPath("unzip"); err == nil {
+		if o, err := exec.Command(unzip, "-t", target).CombinedOutput(); err != nil {
+			t.Errorf("unzip rejected what we wrote: %v\n%s", err, o)
+		}
+	}
+
+	// It is there now, so a second conversion must refuse rather than replace.
+	err = run([]string{"-o", target, archive}, &out, &errOut)
+	if err == nil || !strings.Contains(err.Error(), "already there") {
+		t.Errorf("converting over an existing target gave %v, want a refusal", err)
+	}
+	// And -f is the way to say you meant it.
+	if err := run([]string{"-f", "-o", target, archive}, &out, &errOut); err != nil {
+		t.Errorf("-f -o gave %v, want nil", err)
+	}
+
+	// A format that is read and not written, and it must say so BEFORE reading
+	// the archive: the check is on the target's name.
+	err = run([]string{"-o", filepath.Join(dir, "no.rar"), archive}, &out, &errOut)
+	if !errors.Is(err, unarchive.ErrCannotWrite) {
+		t.Errorf("-o no.rar gave %v, want ErrCannotWrite", err)
+	}
+
+	// And it says so BEFORE looking at the source, which matters when the source
+	// is 4 GiB: "I cannot write .rar" should not take a minute to arrive.
+	//
+	// The discriminator is a source that is not an archive AT ALL. Check the
+	// target first and the error is about the target; open the source first and
+	// the error is about the source. Both are refusals, so asserting merely that
+	// it failed proves nothing -- which is what the first version of this
+	// assertion did, using an empty stdout, and an ablation that moved the check
+	// after the open stayed green because the line it watched for is printed
+	// after both.
+	notAnArchive := filepath.Join(dir, "prose.txt")
+	if err := os.WriteFile(notAnArchive, []byte("nothing archival about this"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err = run([]string{"-o", filepath.Join(dir, "no.rar"), notAnArchive}, &out, &errOut)
+	if errors.Is(err, unarchive.ErrUnknownFormat) {
+		t.Errorf("the source was read before the target was judged: %v", err)
+	}
+	if !errors.Is(err, unarchive.ErrCannotWrite) {
+		t.Errorf("gave %v, want ErrCannotWrite about the target", err)
+	}
+
+	// One target means one source.
+	err = run([]string{"-o", filepath.Join(dir, "two.zip"), archive, archive}, &out, &errOut)
+	if err == nil || !strings.Contains(err.Error(), "one archive") {
+		t.Errorf("two sources into one target gave %v, want a refusal", err)
 	}
 }
