@@ -26,6 +26,8 @@ unarchive -o disc.7z disc.iso     # yes, that works
 | ZIP | ✅ | including the jar/epub/odf family |
 | 7z | ✅ | follows its own `.001` chain, by name |
 | tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access |
+| ar | ✅ | static libraries **and `.deb`** — both long-name spellings, SysV and BSD |
+| cpio | ✅ | `newc`, `crc` and `odc` — an initramfs, an RPM's payload |
 | gzip, bzip2, xz, zstd, lz4 | ✅ | stream wrappers: `.tar.gz`, `.tgz`, `.tar.zst`, a lone `notes.txt.gz` … |
 | ISO 9660 | ✅ | a disc image is an archive too — read through `go-filesystems/iso9660` |
 | SquashFS | ✅ | likewise, through `go-filesystems/squashfs` |
