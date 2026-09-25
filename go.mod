@@ -13,7 +13,7 @@ require (
 	github.com/go-filesystems/rar v0.0.0-20260924203345-10aeb171a8fe
 	github.com/go-filesystems/sevenzip v0.2.0
 	github.com/go-filesystems/squashfs v0.3.0
-	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/compress v1.20.1
 	github.com/pierrec/lz4/v4 v4.1.30
 	github.com/ulikunitz/xz v0.5.17
 )
