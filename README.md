@@ -29,6 +29,7 @@ unarchive -o disc.7z disc.iso     # yes, that works
 | ar | ✅ | static libraries **and `.deb`** — both long-name spellings, SysV and BSD |
 | cpio | ✅ | `newc`, `crc` and `odc` — an initramfs, an RPM's payload |
 | gzip, bzip2, xz, zstd, lz4 | ✅ | stream wrappers: `.tar.gz`, `.tgz`, `.tar.zst`, a lone `notes.txt.gz` … |
+| compress `.Z` | read only | the LZW `compress/lzw` cannot read — see below |
 | ISO 9660 | ✅ | a disc image is an archive too — read through `go-filesystems/iso9660` |
 | SquashFS | ✅ | likewise, through `go-filesystems/squashfs` |
 | plakar `.ptar` | recognised, not unpacked | and the reason is below |
@@ -43,7 +44,21 @@ plain numbered split of a RAR is a different thing this has no entry point for.
 `.tar`, `.tar.gz`, `.tgz`, `.tar.xz`, `.txz`, `.tar.zst`, `.tzst`, `.tar.lz4`,
 `.tar.bz2`, `.tbz2`, `.tbz`, `.zip`, `.jar`, `.7z`.
 
-Not written: **RAR**, because no free writer exists. That is the whole list.
+Not written: **RAR**, because no free writer exists, and **`.Z`**, because a new
+`.Z` is a file nobody should be making — `gzip`, `xz` and `zstd` all compress
+better and are read everywhere. Both say which and why:
+
+```
+$ unarchive -o out.tar.Z film.tar.Z
+unarchive: out.tar.Z: unarchive: this format is read but not written: the LZW of
+compress(1). A new .Z is a file nobody should be making: gzip, xz and zstd all
+compress better and are read everywhere
+```
+
+`.Z` is read through
+[go-compressions/compress](https://github.com/go-compressions/compress), written
+for this: `compress/lzw` stops at 12 bits, has no clear code, and knows nothing of
+the group alignment, so it cannot read a `.Z` at all.
 
 bzip2 used to be on it, for a different kind of reason — the standard library
 decompresses bzip2 and nothing compressed it. A missing *library* is not a

@@ -15,6 +15,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/go-compressions/bzip2 v0.1.0 h1:vGcul2hWRBFSs8WC6i6obf+1ulhD6S7z3ZGsJ/rHvng=
 github.com/go-compressions/bzip2 v0.1.0/go.mod h1:/WYR5YGF4U0NqCoSKB1sP8LXmdbUaHu6Nmcj+7OJMc8=
+github.com/go-compressions/compress v0.1.1 h1:nLh9WI39CEbDxHR7WEwbiER3UckonbDZpR5EenonHwM=
+github.com/go-compressions/compress v0.1.1/go.mod h1:cyMIUxmC8AdisCuFbd6IG18dLxEJWZStY2b0/6riR7w=
 github.com/go-filesystems/detect v0.1.0 h1:DCiR5lLKFJ/kon8wKs1ueG1hX27wJaIHqym+Ai0Y/pU=
 github.com/go-filesystems/detect v0.1.0/go.mod h1:OCGE1O8l2Z41PODXWkuJOin83ooqHWh439jSpOGWb/Q=
 github.com/go-filesystems/interface v0.3.0 h1:cV4+2mvW1eCPyde+KIDRaGuIPAcr2sDgKrxGuGQr98k=

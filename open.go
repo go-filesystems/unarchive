@@ -117,7 +117,7 @@ func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 			return nil, format, fmt.Errorf("%s: %w", path, err)
 		}
 		return fsys, format, nil
-	case FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4:
+	case FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4, FormatZ:
 		// A wrapper holds ONE stream, and what is in it is another question:
 		// usually a tar, sometimes a single ordinary file, occasionally another
 		// archive entirely. openCompressed peels it and asks again.
