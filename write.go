@@ -90,6 +90,9 @@ var writeSuffixes = []struct {
 	{".tbz", FormatTar, FormatBzip2},
 	{".tar", FormatTar, FormatUnknown},
 	{".7z", Format7z, FormatUnknown},
+	{".a", FormatAr, FormatUnknown}, {".deb", FormatAr, FormatUnknown},
+	{".cpio", FormatCpio, FormatUnknown},
+	{".iso", FormatISO9660, FormatUnknown},
 	{".zip", FormatZIP, FormatUnknown},
 	{".jar", FormatZIP, FormatUnknown},
 	{".bz2", FormatTar, FormatBzip2},
@@ -256,6 +259,15 @@ func builderFor(f Format) func(io.WriteSeeker) (overlay.Builder, error) {
 			return &zipBuilder{w: zip.NewWriter(w)}, nil
 		case Format7z:
 			return szip.NewWriter(w)
+		case FormatAr:
+			return newArBuilder(w)
+		case FormatCpio:
+			return newCpioBuilder(w), nil
+		case FormatISO9660:
+			// The volume id is what a mounted image is CALLED, and eleven
+			// characters is all ISO 9660 allows without an extension this builder
+			// does not write.
+			return newISOBuilder(w, "UNARCHIVE"), nil
 		}
 		return nil, fmt.Errorf("%s: %w", f, ErrCannotWrite)
 	}
