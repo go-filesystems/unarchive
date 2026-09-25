@@ -23,7 +23,7 @@ unarchive -o disc.7z disc.iso     # yes, that works
 | | read | notes |
 |---|---|---|
 | RAR 1.5–4.x, RAR5 | ✅ | multi-volume sets followed by volume **number** |
-| ZIP | ✅ | including the jar/epub/odf family |
+| ZIP | ✅ | including the jar/epub/odf family, and entries compressed with **bzip2, LZMA, xz or zstd** — not just deflate |
 | 7z | ✅ | follows its own `.001` chain, by name |
 | tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access |
 | ar | ✅ | static libraries **and `.deb`** — both long-name spellings, SysV and BSD |
