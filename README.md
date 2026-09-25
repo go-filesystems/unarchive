@@ -29,6 +29,7 @@ unarchive -o disc.7z disc.iso     # yes, that works
 | gzip, bzip2, xz, zstd, lz4 | ✅ | stream wrappers: `.tar.gz`, `.tgz`, `.tar.zst`, a lone `notes.txt.gz` … |
 | ISO 9660 | ✅ | a disc image is an archive too — read through `go-filesystems/iso9660` |
 | SquashFS | ✅ | likewise, through `go-filesystems/squashfs` |
+| plakar `.ptar` | recognised, not unpacked | and the reason is below |
 
 ### Written
 
@@ -48,6 +49,33 @@ only one of them is permanent.
 with the first bits of its own data, so there is nothing to recognise it *by*.
 The only way to open one is to be told, by an extension or a flag, and this
 package decides from the bytes.
+
+### plakar `.ptar`: recognised, and deliberately not unpacked
+
+A `.ptar` is not an archive. It is a **Kloset repository in a file** — a config
+blob, a packfile region and a state region, addressed by MAC — holding snapshots
+and deduplicated chunks, and **encrypted** unless it was made with `-plaintext`.
+
+Reading one means implementing their storage container, their state index, their
+packfile format, their snapshot model, and decryption with a key the caller must
+supply. That is a backup tool, not an unarchiver, and *"which snapshot?"* is a
+question this command has nowhere to ask. So it is recognised and says what it
+is:
+
+```
+$ unarchive backup.ptar
+unarchive: backup.ptar: unarchive: recognised, but this format is not read yet:
+ptar is a plakar Kloset archive: a content-addressed repository of snapshots and
+deduplicated chunks, encrypted unless it was made with -plaintext. Open it with
+plakar, which has the key
+```
+
+Recognition earns its keep on its own: without it, a `.ptar` answered *"the bytes
+match no format this knows"*, which sends somebody hunting for a corrupt file.
+
+The magic is `_PLATAR_`, read out of PlakarKorp's own storage driver. Guessing it
+from the extension — the thing this package exists not to do — would have got it
+wrong.
 
 ## An image is an archive too
 

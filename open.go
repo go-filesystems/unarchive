@@ -119,7 +119,15 @@ func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 		return fsys, format, nil
 	default:
 		// Recognised and not read yet, which is a different sentence from "I do
-		// not know what this is" and sends a person somewhere else.
+		// not know what this is" and sends a person somewhere else -- and for a
+		// format with a Note, somewhere more precise still.
+		if note := format.Note(); note != "" {
+			// General sentence first, specific one after: the other order put
+			// "recognised, but this format is not read yet" AFTER a paragraph
+			// that had already said more, so the sentinel read like a trailing
+			// afterthought.
+			return nil, format, fmt.Errorf("%s: %w: %s is %s", path, ErrNotImplemented, format, note)
+		}
 		return nil, format, fmt.Errorf("%s: %s: %w", path, format, ErrNotImplemented)
 	}
 }
