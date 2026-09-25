@@ -126,6 +126,10 @@ func list(fsys filesystem.Filesystem, stdout io.Writer) error {
 // stem is the archive's name without its extension or its volume marker, which
 // is what a directory made for it should be called.
 func stem(name string) string {
+	// A compressed wrapper's suffix comes off FIRST, and as a whole: trimming
+	// one extension from fixture.tar.gz leaves fixture.tar, and the directory is
+	// then named after half a suffix.
+	name = unarchive.InnerName(name)
 	name = strings.TrimSuffix(name, filepath.Ext(name))
 	if i := strings.LastIndex(strings.ToLower(name), ".part"); i > 0 {
 		name = name[:i]

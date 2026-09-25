@@ -45,14 +45,21 @@ func TestThreeKindsOfNoAreThreeDifferentSentences(t *testing.T) {
 		t.Errorf("a plain file gave %v, want ErrUnknownFormat", err)
 	}
 
-	// 2. Recognised, not read yet -- and the fixture is VALID, because that is
-	// what this sentence is about. A truncated file would land in case 3 no
-	// matter which formats are wired.
+	// 2. Recognised, not read yet -- and there is NOTHING in that bucket any
+	// more. This row stood in with 7z, then a zip, then gzip, and each became a
+	// success the day its format landed; gzip was the last of them.
 	//
-	// gzip is the format standing in for it today. When gzip is wired this row
-	// moves to whatever is still unread, and the test is coupled to the
-	// TAXONOMY rather than to the list -- which is the mistake it made twice: it
-	// used 7z, then a zip, and each became case 3 the day that format landed.
+	// The row cannot be rewritten with another format, because every format the
+	// sniffer recognises is now read. So the sentence is not tested here by
+	// example: it is held by the count in
+	// unarchive.TestEveryDeclaredFormatIsEitherReadOrDeclaredUnread, which
+	// fails if a format is ever added to the sniffer alone. A row that names a
+	// format is coupled to the LIST; a count is coupled to the taxonomy, which
+	// is what this test is about.
+	//
+	// What is asserted instead is that the format that used to stand here now
+	// WORKS, so that the three sentences stay three and this one does not
+	// quietly become case 1 or 3.
 	gz := filepath.Join(dir, "something.gz")
 	var gzBuf bytes.Buffer
 	zw := gzip.NewWriter(&gzBuf)
@@ -65,12 +72,8 @@ func TestThreeKindsOfNoAreThreeDifferentSentences(t *testing.T) {
 	if err := os.WriteFile(gz, gzBuf.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := run([]string{gz}, &out, &errOut)
-	if !errors.Is(err, unarchive.ErrNotImplemented) {
-		t.Errorf("a valid gzip gave %v, want ErrNotImplemented", err)
-	}
-	if err != nil && !strings.Contains(err.Error(), "gzip") {
-		t.Errorf("the error does not name the format: %v", err)
+	if err := run([]string{gz}, &out, &errOut); err != nil {
+		t.Errorf("a valid gzip gave %v, and gzip is read now", err)
 	}
 
 	// 3. Recognised, read, and genuinely broken. Neither of the sentences above
@@ -79,7 +82,7 @@ func TestThreeKindsOfNoAreThreeDifferentSentences(t *testing.T) {
 	if err := os.WriteFile(truncated, []byte("PK\x03\x04and then nothing useful"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err = run([]string{truncated}, &out, &errOut)
+	err := run([]string{truncated}, &out, &errOut)
 	if err == nil {
 		t.Fatal("a truncated zip was accepted")
 	}
@@ -122,6 +125,33 @@ func TestHumanSizeReadsLikeASize(t *testing.T) {
 	} {
 		if got := humanSize(c.in); got != c.want {
 			t.Errorf("humanSize(%d) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestStemTakesAWholeWrapperSuffixOff.
+//
+// The directory an archive is extracted into is named after the archive, and a
+// compressed wrapper carries TWO extensions. Trimming one leaves "fixture.tar",
+// which is a directory named after half a suffix -- valid, and visibly wrong to
+// whoever opens the folder.
+func TestStemTakesAWholeWrapperSuffixOff(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"fixture.tar.gz", "fixture"},
+		{"fixture.tgz", "fixture"},
+		{"fixture.tar.bz2", "fixture"},
+		{"fixture.tar.xz", "fixture"},
+		{"fixture.tar.zst", "fixture"},
+		{"fixture.tar.lz4", "fixture"},
+		{"notes.txt.gz", "notes"},
+		{"plain.zip", "plain"},
+		{"plain.7z", "plain"},
+		// The volume rule still applies, and still comes after the suffix.
+		{"movie.part1.rar", "movie"},
+		{"movie.part01.rar", "movie"},
+	} {
+		if got := stem(c.in); got != c.want {
+			t.Errorf("stem(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

@@ -22,6 +22,11 @@ import (
 // the set by volume NUMBER within path's directory, so files carrying an id a
 // download inserted are still reached and nothing is renamed.
 func Open(path string) (filesystem.Filesystem, Format, error) {
+	return openAt(path, 0)
+}
+
+// openAt is Open, carrying how many stream wrappers have already been peeled.
+func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, FormatUnknown, err
@@ -74,6 +79,11 @@ func Open(path string) (filesystem.Filesystem, Format, error) {
 			return nil, format, fmt.Errorf("%s: %w", path, err)
 		}
 		return fsys, format, nil
+	case FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4:
+		// A wrapper holds ONE stream, and what is in it is another question:
+		// usually a tar, sometimes a single ordinary file, occasionally another
+		// archive entirely. openCompressed peels it and asks again.
+		return openCompressed(path, format, depth)
 	case FormatRAR:
 		fsys, err := rar.Open(path)
 		if err != nil {

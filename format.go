@@ -41,7 +41,15 @@ const (
 	FormatBzip2   Format = "bzip2" // likewise
 	FormatXZ      Format = "xz"    // likewise
 	FormatZstd    Format = "zstd"  // likewise
+	FormatLZ4     Format = "lz4"   // likewise
 )
+
+// Why brotli is not here. It has no signature: a brotli stream begins with the
+// first bits of its own data, so there is nothing to recognise it BY. The only
+// way to open one is to be told, by an extension or a flag, and this package
+// decides from the bytes. A format that cannot be sniffed does not belong in a
+// sniffer, and pretending otherwise would mean guessing brotli for every file
+// nothing else claimed.
 
 // ErrUnknownFormat is returned when nothing recognises the bytes.
 var ErrUnknownFormat = errors.New("unarchive: the bytes match no format this knows")
@@ -69,6 +77,7 @@ var signatures = []signature{
 	{Format7z, 0, []byte{'7', 'z', 0xBC, 0xAF, 0x27, 0x1C}},
 	{FormatXZ, 0, []byte{0xFD, '7', 'z', 'X', 'Z', 0x00}},
 	{FormatZstd, 0, []byte{0x28, 0xB5, 0x2F, 0xFD}},
+	{FormatLZ4, 0, []byte{0x04, 0x22, 0x4D, 0x18}}, // the LZ4 frame format
 	{FormatZIP, 0, []byte("PK\x03\x04")},
 	{FormatZIP, 0, []byte("PK\x05\x06")}, // an empty archive is still an archive
 	{FormatZIP, 0, []byte("PK\x07\x08")}, // spanned
@@ -107,7 +116,7 @@ func Sniff(r io.ReaderAt) (Format, error) {
 // anything.
 func (f Format) Compressed() bool {
 	switch f {
-	case FormatGzip, FormatBzip2, FormatXZ, FormatZstd:
+	case FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4:
 		return true
 	}
 	return false
