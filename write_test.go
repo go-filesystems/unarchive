@@ -51,6 +51,24 @@ func source(t *testing.T) (path string, want map[string]string) {
 	return path, want
 }
 
+// decompressors are the tool that undoes each stream wrapper, and they are
+// spelled out rather than left to tar.
+//
+// ⛔ `tar -xf` on a .tar.lz4 works on macOS and FAILS on Linux: BSD tar is
+// libarchive and sniffs the compression, GNU tar does not read lz4 at all
+// without being told. So a test that handed the wrapped file to tar passed here
+// for a reason that had nothing to do with the archive, and CI said "This does
+// not look like a tar archive" on arm64.
+//
+// Undoing the wrapper explicitly is also a better witness: it checks the two
+// layers separately, so a broken wrapper and a broken tar cannot be confused.
+var decompressors = map[Format][]string{
+	FormatGzip: {"gzip", "-dc"},
+	FormatXZ:   {"xz", "-dc"},
+	FormatZstd: {"zstd", "-dqc"},
+	FormatLZ4:  {"lz4", "-dqc"},
+}
+
 // extractors are the SYSTEM tools that judge each target format. Reading our
 // own output back with our own reader would prove that two halves of this
 // module agree with each other, which is not the question an archive is for.
@@ -64,6 +82,37 @@ var extractors = map[Format]func(t *testing.T, archive, into string){
 	Format7z: func(t *testing.T, archive, into string) {
 		run(t, "7zz", "x", "-bso0", "-bsp0", "-o"+into, archive)
 	},
+}
+
+// unwrap undoes a stream wrapper with its own tool and returns the plain
+// archive's path. A target with no wrapper is returned unchanged.
+func unwrap(t *testing.T, archive string, wrapper Format) string {
+	t.Helper()
+	if wrapper == FormatUnknown {
+		return archive
+	}
+	argv, ok := decompressors[wrapper]
+	if !ok {
+		t.Fatalf("no tool here undoes %v, so nothing judges it", wrapper)
+	}
+	bin, err := exec.LookPath(argv[0])
+	if err != nil {
+		t.Skipf("no %s here to undo the wrapper with", argv[0])
+	}
+	plain := filepath.Join(t.TempDir(), "unwrapped.tar")
+	out, err := os.Create(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
+	cmd := exec.Command(bin, append(argv[1:], archive)...)
+	cmd.Stdout = out
+	var errOut strings.Builder
+	cmd.Stderr = &errOut
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("%s could not undo the wrapper: %v\n%s", argv[0], err, errOut.String())
+	}
+	return plain
 }
 
 func run(t *testing.T, tool string, args ...string) {
@@ -154,7 +203,7 @@ func TestAnArchiveIsRewrittenOnlyAtTheSeal(t *testing.T) {
 			if err := os.MkdirAll(into, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			extractors[tgt.Archive](t, out, into)
+			extractors[tgt.Archive](t, unwrap(t, out, tgt.Wrapper), into)
 
 			for name, body := range want {
 				got, err := os.ReadFile(filepath.Join(into, name))
