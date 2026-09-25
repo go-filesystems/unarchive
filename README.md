@@ -30,14 +30,16 @@ unarchive -o backup.tar.zst backup.zip
 ### Written
 
 `.tar`, `.tar.gz`, `.tgz`, `.tar.xz`, `.txz`, `.tar.zst`, `.tzst`, `.tar.lz4`,
-`.zip`, `.jar`, `.7z`.
+`.tar.bz2`, `.tbz2`, `.tbz`, `.zip`, `.jar`, `.7z`.
 
-Not written, and it says which and why rather than failing generically:
+Not written: **RAR**, because no free writer exists. That is the whole list.
 
-| | |
-|---|---|
-| RAR | no free writer exists |
-| bzip2 | the standard library decompresses it and nothing here compresses it |
+bzip2 used to be on it, for a different kind of reason — the standard library
+decompresses bzip2 and nothing compressed it. A missing *library* is not a
+property of a format, so the library was written
+([go-compressions/bzip2](https://github.com/go-compressions/bzip2)) and the
+sentence stopped being true. The two reasons look identical from the outside and
+only one of them is permanent.
 
 **brotli is absent on purpose.** It has no signature: a brotli stream begins
 with the first bits of its own data, so there is nothing to recognise it *by*.

@@ -9,6 +9,8 @@ github.com/bodgit/windows v1.0.1/go.mod h1:a6JLwrB4KrTR5hBpp8FI9/9W9jJfeQ2h4XDXU
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/go-compressions/bzip2 v0.1.0 h1:vGcul2hWRBFSs8WC6i6obf+1ulhD6S7z3ZGsJ/rHvng=
+github.com/go-compressions/bzip2 v0.1.0/go.mod h1:/WYR5YGF4U0NqCoSKB1sP8LXmdbUaHu6Nmcj+7OJMc8=
 github.com/go-filesystems/interface v0.3.0 h1:cV4+2mvW1eCPyde+KIDRaGuIPAcr2sDgKrxGuGQr98k=
 github.com/go-filesystems/interface v0.3.0/go.mod h1:9MDfHNNKg9cW1qBa3hmURQj4jiWIdTo9Xpgdt8ZzvV8=
 github.com/go-filesystems/overlay v0.2.0 h1:3V+KYy5vAjccejZYQInRK0ObWPU9DffrykqTPlwaqo4=
