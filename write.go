@@ -18,6 +18,7 @@ import (
 
 	gobzip2 "github.com/go-compressions/bzip2"
 	"github.com/go-filesystems/overlay"
+	"github.com/go-filesystems/rar"
 	szip "github.com/go-filesystems/sevenzip"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -100,6 +101,7 @@ var writeSuffixes = []struct {
 	// entirely makes TargetFor answer ErrUnknownFormat -- "the bytes match no
 	// format this knows" for a format this package reads perfectly well, which is
 	// both false and unhelpful in one sentence.
+	// Written STORED, not unwritable: see FormatRAR.Note.
 	{".rar", FormatRAR, FormatUnknown},
 	// ⛔ LOWER CASE. TargetFor lower-cases the name before matching, so ".Z" here
 	// never matches anything -- which is how the first attempt at this left the
@@ -122,8 +124,6 @@ func TargetFor(name string) (WriteTarget, error) {
 		}
 		t := WriteTarget{Archive: s.archive, Wrapper: s.wrapper}
 		switch {
-		case s.archive == FormatRAR:
-			return t, fmt.Errorf("%s: rar: %w", name, ErrCannotWrite)
 		case s.wrapper == FormatZ:
 			// General sentence first, specific one after -- the same order Open
 			// uses for a Note, and for the same reason: the other way round left
@@ -263,6 +263,13 @@ func builderFor(f Format) func(io.WriteSeeker) (overlay.Builder, error) {
 			return newArBuilder(w)
 		case FormatCpio:
 			return newCpioBuilder(w), nil
+		case FormatRAR:
+			// Stored only, and that is the format's doing rather than this
+			// builder's: RAR's compression is proprietary and unpublished, and
+			// the UnRAR licence forecloses deriving it. See FormatRAR.Note --
+			// and note that the entries still carry a CRC-32 of their data, so a
+			// reader can tell a damaged one from a good one.
+			return rar.NewWriter(w), nil
 		case FormatISO9660:
 			// The volume id is what a mounted image is CALLED, and eleven
 			// characters is all ISO 9660 allows without an extension this builder

@@ -73,21 +73,47 @@ func TestAPtarIsRecognisedAndSaysWhatItIs(t *testing.T) {
 	}
 }
 
-// TestOnlyPtarCarriesANote. A Note is for a format whose "not read yet" would
-// mislead; every other format's plain sentence is the right one, and a Note on
-// all of them would be noise nobody reads.
-func TestOnlyPtarCarriesANote(t *testing.T) {
-	for _, f := range []Format{
-		FormatUnknown, FormatRAR, FormatZIP, Format7z, FormatTar, FormatGzip,
-		FormatBzip2, FormatXZ, FormatZstd, FormatLZ4, FormatISO9660,
-		FormatSquashFS,
-	} {
+// TestOnlySomeFormatsCarryANote. A Note is for a format whose plain sentence
+// would mislead; every other format's is the right one, and a Note on all of them
+// would be noise nobody reads.
+//
+// The list is exhaustive on purpose, and the count is asserted: a format added
+// upstream falls into neither column, the count fails, and somebody decides
+// rather than the default deciding for them.
+func TestOnlySomeFormatsCarryANote(t *testing.T) {
+	// Every format whose bare sentence says everything there is to say.
+	plain := []Format{
+		FormatUnknown, FormatZIP, Format7z, FormatTar, FormatAr, FormatCpio,
+		FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4,
+		FormatLZO, FormatLzip,
+		FormatISO9660, FormatSquashFS, FormatHFSPlus, FormatDMG,
+		FormatXAR, FormatCAB, FormatRPM, FormatWARC,
+	}
+	// And every format that needs more than that, with what the note is FOR.
+	noted := map[Format]string{
+		FormatPtar: "recognised and not unpacked, which would read as a promise",
+		FormatZ:    "read and not written, and nobody should be making a new one",
+		FormatRAR: "written, but with no compression, and finding that out from " +
+			"the file size afterwards is too late",
+	}
+
+	for _, f := range plain {
 		if note := f.Note(); note != "" {
 			t.Errorf("%v carries a note: %q", f, note)
 		}
 	}
-	if FormatPtar.Note() == "" {
-		t.Error("ptar carries no note, and its bare sentence is the misleading one")
+	for f, why := range noted {
+		if f.Note() == "" {
+			t.Errorf("%v carries no note, and it needs one: %s", f, why)
+		}
+	}
+
+	// ⛔ The count. Without it the two lists above drift from the constants and
+	// a new format quietly joins neither.
+	if n := len(plain) + len(noted); n != formatsInThisPackage {
+		t.Errorf("this test accounts for %d formats and the package has %d: a "+
+			"format was added and nobody said which column it belongs in",
+			n, formatsInThisPackage)
 	}
 }
 

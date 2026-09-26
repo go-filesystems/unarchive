@@ -22,19 +22,53 @@ unarchive -o disc.7z disc.iso     # yes, that works
 
 | | read | notes |
 |---|---|---|
-| RAR 1.5–4.x, RAR5 | ✅ | multi-volume sets followed by volume **number** |
+| RAR 1.5–4.x, RAR5 | ✅ read, ✅ write **stored** | multi-volume sets followed by volume **number**; a `.rar` written here carries no compression at all — see below |
 | ZIP | ✅ | including the jar/epub/odf family, and entries compressed with **bzip2, LZMA, xz or zstd** — not just deflate |
 | 7z | ✅ | follows its own `.001` chain, by name |
 | tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access |
 | ar | ✅ | static libraries **and `.deb`** — both long-name spellings, SysV and BSD |
 | cpio | ✅ | `newc`, `crc`, `odc` **and the old binary variant, both byte orders** |
 | gzip, bzip2, xz, zstd, lz4 | ✅ | stream wrappers: `.tar.gz`, `.tgz`, `.tar.zst`, a lone `notes.txt.gz` … |
+| lzop `.lzo` | ✅ | likewise, through `go-compressions/lzo` — LZO1X, no compressor |
+| lzip `.lz` | ✅ | likewise, through `go-compressions/lzip` — LZMA in lzip's framing, not xz's |
 | compress `.Z` | read only | the LZW `compress/lzw` cannot read — see below |
+| xar | ✅ | the macOS `.pkg` container, through `go-filesystems/xar` |
+| CAB | ✅ | Microsoft Cabinet, `None` and MSZIP, through `go-filesystems/cab` |
+| RPM | ✅ | headers **and** payload, gzip/xz/zstd/bzip2, through `go-filesystems/rpm` |
+| WARC | ✅ | a web crawl, one record per entry, through `go-filesystems/warc` |
 | ISO 9660 | ✅ | a disc image is an archive too — read through `go-filesystems/iso9660` |
 | SquashFS | ✅ | likewise, through `go-filesystems/squashfs` |
 | HFS+ | ✅ | what a `.dmg` held before APFS — through `go-filesystems/hfsplus` |
 | DMG | ✅ | a UDIF *container* around one of the above: peeled, then sniffed |
 | plakar `.ptar` | recognised, not unpacked | and the reason is below |
+
+### Writing a `.rar` gives you an uncompressed one
+
+RAR's compression is proprietary and unpublished, and the UnRAR licence says the
+source "cannot be used to develop RAR (WinRAR) compatible archiver and to
+re-create RAR compression algorithm". So there is nothing here to finish later:
+`go-filesystems/rar` writes the **stored** method, which the published RAR 5.0
+container note is enough for, and nothing else.
+
+That is said out loud rather than left to be noticed — `unarchive -o out.rar`
+prints it before writing a byte. Entries still carry a **CRC-32 of their data**,
+so a damaged one is detectable; a stored entry with no checksum would be an
+archive with nothing in it to verify.
+
+### Four formats read from the handle, and closed unlike an image
+
+xar, CAB, RPM and WARC are opened through an `io.ReaderAt` exactly the way an
+image is, and they differ from one in the one respect that matters: each is
+
+```go
+func (f *FS) Close() error { return nil }
+```
+
+while `iso9660` and `squashfs` forward `Close` to the reader they were given.
+Wrapping those closes the file twice and says so, late; **not** wrapping these
+leaks it, once per open, and says nothing ever. Six drivers, one signature, two
+ownership rules — so each one's `Close` was read rather than assumed, and the
+wrapping is watched by a test with an injected closer rather than believed.
 
 A **numbered split** — `film.zip.001`, `.002`, … — is read as one file, whatever
 the format inside it, so `unarchive film.zip.001` works and extracts into `film/`.

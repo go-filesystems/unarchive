@@ -49,6 +49,16 @@ const (
 	FormatLZ4     Format = "lz4"   // likewise
 	// compress(1)'s .Z, read and not written -- see Format.Note.
 	FormatZ Format = "compress"
+	// Two more stream wrappers, same shape as the ones above.
+	FormatLZO  Format = "lzo"  // lzop's container around LZO1X
+	FormatLzip Format = "lzip" // LZMA in lzip's framing, not xz's
+	// Archives whose driver reads them through an io.ReaderAt, like the images
+	// below -- but they are archives, not filesystems, and they do NOT adopt the
+	// handle they are given. See openReaderArchive.
+	FormatXAR  Format = "xar"  // the macOS .pkg container
+	FormatCAB  Format = "cab"  // Microsoft Cabinet
+	FormatRPM  Format = "rpm"  // lead + headers + one compressed cpio payload
+	FormatWARC Format = "warc" // a web crawl, one record per entry
 	// Filesystem IMAGES, which are archives in every way that matters here: one
 	// file holding a tree, handed around to be unpacked. They are read through
 	// the org's own drivers rather than anything written here.
@@ -113,6 +123,17 @@ var signatures = []signature{
 	// 0x1F and stopping would claim either for the other.
 	{FormatZ, 0, []byte{0x1F, 0x9D}},
 	{FormatBzip2, 0, []byte("BZh")},
+	{FormatLZO, 0, []byte{0x89, 'L', 'Z', 'O', 0x00, 0x0D, 0x0A, 0x1A, 0x0A}},
+	{FormatLzip, 0, []byte("LZIP")},
+	{FormatXAR, 0, []byte("xar!")},
+	{FormatCAB, 0, []byte("MSCF")},
+	{FormatRPM, 0, []byte{0xED, 0xAB, 0xEE, 0xDB}},
+	// A WARC has no magic number: it begins with its own version line, in text.
+	// Both versions are sniffed by their common prefix rather than one entry each,
+	// because "WARC/1." is already as specific as a four-byte magic and a 1.2
+	// would otherwise read as no format at all rather than as a WARC this package
+	// does not know the version of.
+	{FormatWARC, 0, []byte("WARC/1.")},
 	// ⛔ The magic is _PLATAR_, not _PTAR_. Read out of PlakarKorp's own storage
 	// driver rather than guessed from the extension, which is the whole doctrine
 	// of this file and would have got it wrong here.
@@ -212,6 +233,12 @@ func (f Format) Note() string {
 		return "the LZW of compress(1). A new .Z is a file nobody should be " +
 			"making: gzip, xz and zstd all compress better and are read everywhere"
 	}
+	if f == FormatRAR {
+		return "written with no compression at all. RAR's algorithm is " +
+			"proprietary and unpublished, and the UnRAR licence forecloses " +
+			"deriving it, so there is nothing here to finish later. Entries " +
+			"still carry a CRC-32 of their data, so a damaged one is detectable"
+	}
 	if f == FormatPtar {
 		return "a plakar Kloset archive: a content-addressed repository of " +
 			"snapshots and deduplicated chunks, encrypted unless it was made " +
@@ -262,7 +289,8 @@ func hasUDIFTrailer(r io.ReaderAt, size int64) bool {
 // anything.
 func (f Format) Compressed() bool {
 	switch f {
-	case FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4, FormatZ:
+	case FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4, FormatZ,
+		FormatLZO, FormatLzip:
 		return true
 	}
 	return false

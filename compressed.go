@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	dotz "github.com/go-compressions/compress"
+	"github.com/go-compressions/lzip"
+	"github.com/go-compressions/lzo"
 	filesystem "github.com/go-filesystems/interface"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -63,6 +65,20 @@ func decompressor(f Format, r io.Reader) (io.Reader, func() error, error) {
 		return z, func() error { z.Close(); return nil }, nil
 	case FormatLZ4:
 		return lz4.NewReader(r), nothing, nil
+	case FormatLZO, FormatLzip:
+		// Both refuse at CONSTRUCTION like .Z does, reading their header there,
+		// so a stream that is not one is caught here rather than at the first
+		// Read. Neither has a Close of its own: the spool's file is the only
+		// thing holding anything, and openCompressed closes that.
+		newReader := lzo.NewReader
+		if f == FormatLzip {
+			newReader = lzip.NewReader
+		}
+		z, err := newReader(r)
+		if err != nil {
+			return nil, nil, err
+		}
+		return z, nothing, nil
 	case FormatZ:
 		// The only wrapper whose reader refuses at CONSTRUCTION: it reads the
 		// three-byte header there, so a stream that is not .Z is caught here
@@ -90,7 +106,14 @@ var wrapperSuffixes = []struct{ from, to string }{
 	{".tar.zst", ".tar"}, {".tzst", ".tar"},
 	{".tar.lz4", ".tar"},
 	{".tar.z", ".tar"}, {".taz", ".tar"},
+	{".tar.lzo", ".tar"}, {".tzo", ".tar"},
+	{".tar.lz", ".tar"},
 	{".gz", ""}, {".bz2", ""}, {".xz", ""}, {".zst", ""}, {".lz4", ""},
+	{".lzo", ""},
+	// ⛔ .lz is lzip, NOT lzip's cousin .lzma and not lzop's .lzo. The three are
+	// different framings of two different algorithms and the suffixes are one
+	// letter apart.
+	{".lz", ""},
 	// Lower-cased before matching, so this catches the .Z everybody writes.
 	{".z", ""},
 }
