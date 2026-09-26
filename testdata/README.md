@@ -34,3 +34,19 @@ beyond the framing itself.
 Both are somebody else's bytes, so the tests assert that named entries come back
 **non-empty** rather than pinning their contents: pinning them would be pinning a
 copy, and the thing under test here is the route to the driver, not the driver.
+
+## The symbolic-link pair
+
+| file | written by |
+|---|---|
+| `gnutar-links.tar` | macOS `tar`, `COPYFILE_DISABLE=1` so no AppleDouble entries |
+| `cpio-links.cpio` | `find . -print \| cpio -o -H newc` |
+
+Both hold the same three links — `link-to-real -> real.txt`, `sub/link-up ->
+../real.txt`, `link-absolute -> /etc/passwd` — because the two arrive by different
+routes: tar has a driver of its own, cpio comes through the index and the `io/fs`
+adapter, and **neither declared the symlink type**.
+
+The hostile archives are built in the test with `archive/tar` rather than
+committed: a link followed by an entry beneath it is not something `tar` will write
+for you, and a fixture nobody can regenerate is a fixture nobody can check.

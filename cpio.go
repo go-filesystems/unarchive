@@ -105,7 +105,11 @@ func cpioDone(ra io.ReaderAt, recs []record, closer io.Closer) (filesystem.Files
 	if len(recs) == 0 {
 		return nil, fmt.Errorf("cpio: no entries: %w", ErrUnknownFormat)
 	}
-	return &closerFS{Filesystem: FromFS(newIndexFS(ra, recs)), closer: nopCloser(closer)}, nil
+	index, err := newIndexFS(ra, recs)
+	if err != nil {
+		return nil, err
+	}
+	return &closerFS{Filesystem: FromFS(index), closer: nopCloser(closer)}, nil
 }
 
 // cpioReadNewc reads one SVR4 header. A nil record means the trailer was reached.

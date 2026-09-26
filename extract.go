@@ -55,6 +55,9 @@ type Options struct {
 type Result struct {
 	Dirs  int
 	Files int
+	// Links counts symbolic links written. They were counted as Files until
+	// today, and written as empty regular ones -- see walk.
+	Links int
 	Bytes int64
 }
 
@@ -117,12 +120,35 @@ func walk(fsys filesystem.Filesystem, opener filesystem.Opener, dir, absDest str
 			return err
 		}
 		if e.FileType() == fileTypeDir {
+			// ⛔ A symbolic link already sitting here is refused rather than
+			// followed. MkdirAll walks THROUGH a link to a directory, so an
+			// archive that lists a link called "sub" and then a directory called
+			// "sub" would have this writing wherever the link points -- which is
+			// the whole of the symlink extraction attack, and resolve() cannot
+			// see it because the path it checked was perfectly well behaved.
+			if err := refuseLinkAt(target, inner); err != nil {
+				return err
+			}
 			if err := os.MkdirAll(target, dirPerm(opt)); err != nil {
 				return err
 			}
 			res.Dirs++
 			if err := walk(fsys, opener, inner, absDest, opt, res); err != nil {
 				return err
+			}
+			continue
+		}
+		// Asked BEFORE extractFile, because a link is not a file with no bytes in
+		// it -- which is what every one of them came out as until today: an empty
+		// regular file, silently, counted in Files, while ReadLink had the target
+		// all along.
+		if link, ok := isSymlink(fsys, inner, e); ok {
+			if err := extractSymlink(link, target, opt); err != nil {
+				return fmt.Errorf("%s: %w", inner, err)
+			}
+			res.Links++
+			if opt.Progress != nil {
+				opt.Progress(inner, 0)
 			}
 			continue
 		}
@@ -141,6 +167,15 @@ func walk(fsys filesystem.Filesystem, opener filesystem.Opener, dir, absDest str
 
 // fileTypeDir is the directory marker this org's DirEntry carries.
 const fileTypeDir = 2
+
+// fileTypeSymlink is DT_LNK, which is the value go-filesystems' drivers agree on
+// for a symbolic link.
+//
+// ⛔ Not every driver sets it. This package's own tar reader reported 0 for
+// everything that was not a directory, so the type byte alone cannot answer "is
+// this a link" -- ReadLink is what answers that, and the type byte is used to
+// tell a driver that does NOT know from one that says no. See isSymlink.
+const fileTypeSymlink = 10
 
 func displayDir(dir string) string {
 	if dir == "" {
@@ -169,6 +204,89 @@ func resolve(absDest, inner string) (string, error) {
 	return target, nil
 }
 
+// isSymlink says whether this entry is a symbolic link, and what it points at.
+//
+// ⛔ There is no shared sentinel for "not a link" across the org's drivers -- this
+// package's tar reader returns a bare errors.New, xar and rpm each return their
+// own -- so the error cannot be matched. What can be said is this:
+//
+//   - a driver that DECLARES fileTypeSymlink is believed, and a ReadLink that
+//     then fails is a real failure rather than a "no". Reporting the entry as a
+//     file there would put an empty one where a link belongs, which is the defect
+//     this function exists to end;
+//   - a driver that declares nothing (tar reports 0 for everything that is not a
+//     directory) is asked, and a target that comes back is taken at its word.
+//
+// An empty target is not a link either way: a link to nowhere is not something an
+// archive can record, and treating it as one would make a truncated header read as
+// a link to the current directory.
+func isSymlink(fsys filesystem.Filesystem, inner string, e filesystem.DirEntry) (string, bool) {
+	link, err := fsys.ReadLink(inner)
+	switch {
+	case err == nil && link != "":
+		return link, true
+	case e.FileType() == fileTypeSymlink:
+		// Declared a link and would not say where to. Nothing good can be written
+		// here, so the caller is told to stop rather than given a file.
+		return "", true
+	}
+	return "", false
+}
+
+// extractSymlink writes one link, with the target the archive recorded.
+//
+// ⛔ The target is NOT rewritten and NOT refused, including when it is absolute or
+// climbs above dest. That is a decision, and here is the whole of it.
+//
+// Creating a link writes nothing outside dest: a target is a string in an inode.
+// What would write outside is a later entry going THROUGH the link, and that is
+// closed separately and unconditionally -- refuseLinkAt for a directory, and
+// extractFile for a file. Those two are the guarantee; refusing the target would
+// add nothing to them.
+//
+// What refusing WOULD do is fail the other duty. An RPM or a .deb commonly holds
+// absolute links (/etc/alternatives/... among them), and an archive whose links
+// are refused is an archive this package cannot extract at all. Rewriting the
+// target instead -- stripping a leading separator, as bsdtar does -- produces a
+// tree that means something different from what was packed, which is worse than
+// either.
+//
+// So the link is written as recorded, and a caller walking the result afterwards
+// is in the same position as one walking what tar wrote. That is said in the
+// README rather than left to be found out.
+func extractSymlink(link, target string, opt Options) error {
+	if link == "" {
+		return fmt.Errorf("declared a symbolic link and no target: %w", ErrIncomplete)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), dirPerm(opt)); err != nil {
+		return err
+	}
+	// Lstat rather than Stat, so a link that is already there is seen as a link
+	// rather than as whatever it points at. The rule is extractFile's: replaced
+	// only when asked.
+	if _, err := os.Lstat(target); err == nil {
+		if !opt.Overwrite {
+			return fmt.Errorf("%s: %w", target, ErrExists)
+		}
+		// Remove, never truncate: truncating would write through it.
+		if err := os.Remove(target); err != nil {
+			return err
+		}
+	}
+	return os.Symlink(filepath.FromSlash(link), target)
+}
+
+// refuseLinkAt stops a write from going through a symbolic link that is already
+// there. See the call in walk for what that prevents.
+func refuseLinkAt(target, inner string) error {
+	fi, err := os.Lstat(target)
+	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		return nil
+	}
+	return fmt.Errorf("%q: a symbolic link is already there, and writing through "+
+		"it would leave %s: %w", inner, filepath.Dir(target), ErrEscapes)
+}
+
 // extractFile writes one entry and checks it against its declared size.
 func extractFile(fsys filesystem.Filesystem, opener filesystem.Opener, inner, target string, opt Options) (int64, error) {
 	st, err := fsys.Stat(inner)
@@ -185,6 +303,14 @@ func extractFile(fsys filesystem.Filesystem, opener filesystem.Opener, inner, ta
 
 	if err := os.MkdirAll(filepath.Dir(target), dirPerm(opt)); err != nil {
 		return 0, err
+	}
+	// ⛔ O_TRUNC follows a symbolic link, so overwriting one writes to whatever it
+	// points at. With Overwrite the link is removed and a real file put in its
+	// place; without it, ErrExists is the answer anyway.
+	if fi, err := os.Lstat(target); err == nil && fi.Mode()&os.ModeSymlink != 0 && opt.Overwrite {
+		if err := os.Remove(target); err != nil {
+			return 0, err
+		}
 	}
 	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	if !opt.Overwrite {

@@ -79,8 +79,11 @@ func (w *fsWrap) ListDir(dir string) ([]filesystem.DirEntry, error) {
 	out := make([]filesystem.DirEntry, 0, len(entries))
 	for i, e := range entries {
 		var ftype uint8
-		if e.IsDir() {
+		switch {
+		case e.IsDir():
 			ftype = fileTypeDir
+		case entryIsSymlink(e):
+			ftype = fileTypeSymlink
 		}
 		out = append(out, filesystem.NewDirEntry(uint64(i+1), e.Name(), ftype))
 	}
@@ -216,4 +219,17 @@ func (h *fsHandle) ReadAt(p []byte, off int64) (int, error) {
 		err = io.EOF
 	}
 	return n, err
+}
+
+// entryIsSymlink asks the entry's mode, which an io/fs.DirEntry answers only
+// through Info.
+//
+// ⛔ Info() is a call, not a field: for a zip or a 7z it reads the header the
+// entry came from. An error here means the mode is unknown, and unknown is not
+// "regular" -- but it cannot be "link" either, so the type byte is left at 0 and
+// Extract falls back to asking ReadLink, which is what it does for every driver
+// that declares nothing.
+func entryIsSymlink(e iofs.DirEntry) bool {
+	fi, err := e.Info()
+	return err == nil && fi.Mode()&iofs.ModeSymlink != 0
 }

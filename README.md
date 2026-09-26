@@ -25,7 +25,7 @@ unarchive -o disc.7z disc.iso     # yes, that works
 | RAR 1.5–4.x, RAR5 | ✅ read, ✅ write **stored** | multi-volume sets followed by volume **number**; a `.rar` written here carries no compression at all — see below |
 | ZIP | ✅ | including the jar/epub/odf family, and entries compressed with **bzip2, LZMA, xz or zstd** — not just deflate |
 | 7z | ✅ | follows its own `.001` chain, by name |
-| tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access |
+| tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access, **symbolic links included** |
 | ar | ✅ | static libraries **and `.deb`** — both long-name spellings, SysV and BSD |
 | cpio | ✅ | `newc`, `crc`, `odc` **and the old binary variant, both byte orders** |
 | gzip, bzip2, xz, zstd, lz4 | ✅ | stream wrappers: `.tar.gz`, `.tgz`, `.tar.zst`, a lone `notes.txt.gz` … |
@@ -189,6 +189,47 @@ stored raw *begins* with the filesystem inside it, so a prober reading only the
 head would recognise that filesystem and read straight past the container. That
 is the wrong answer even when it works — the same image written sparse or
 compressed would then be unreadable.
+
+## Symbolic links
+
+A link comes out a link, with the target the archive recorded. **Every one of them
+came out as an empty regular file until v0.10.0** — `Extract` asked only whether an
+entry was a directory, so a link fell through to the file path and wrote the zero
+bytes a link's body contains. No error, and it was counted in `Files`. `ReadLink`
+had the target the whole time.
+
+`Result` counts them separately now, and that separation is deliberate: a count
+that lumped them in with files would have passed just as well against the old
+behaviour.
+
+### The target is written as recorded, including an absolute one
+
+Creating a link writes nothing outside the destination — a target is a string in an
+inode. What *would* write outside is a later entry going **through** the link, and
+that is closed separately and unconditionally:
+
+| | |
+|---|---|
+| a directory where a link already sits | refused, `ErrEscapes`. `MkdirAll` walks *through* a link to a directory |
+| a file where a link already sits | the link is removed first, or refused. `O_TRUNC` **follows** a link, so overwriting one writes to whatever it points at |
+| an entry listed *beneath* a link | refused at **Open**, `ErrNestedUnderNonDirectory` |
+
+Those three are the guarantee. Refusing the target would add nothing to them, and
+it would make an RPM or a `.deb` unextractable — absolute links are ordinary in
+both. Rewriting the target instead, as `bsdtar` does by stripping a leading
+separator, produces a tree that means something other than what was packed.
+
+So a caller walking the extracted result is in the same position as one walking
+what `tar` wrote. That is said here rather than left to be found out.
+
+### Why the nesting case is refused when the archive is opened
+
+Nothing was ever written outside for it: `Extract` descends only into directories,
+so an entry under a link was never reached. What it **was** is silent — `Files` 0,
+no error, and a file the archive held simply gone. By extraction time there is
+nothing left to report it with, so the archive is refused up front, naming both the
+link and the entry under it. `go-filesystems/xar` refuses the same shape in its own
+reader.
 
 ## Why the bytes and not the name
 

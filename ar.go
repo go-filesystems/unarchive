@@ -132,7 +132,11 @@ func openAr(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesystem
 		// aligned; without it every member after an odd-sized one is garbage.
 		off = off + arHeaderLen + msize + msize%2
 	}
-	return &closerFS{Filesystem: FromFS(newIndexFS(ra, recs)), closer: nopCloser(closer)}, nil
+	index, err := newIndexFS(ra, recs)
+	if err != nil {
+		return nil, err
+	}
+	return &closerFS{Filesystem: FromFS(index), closer: nopCloser(closer)}, nil
 }
 
 // nopCloser gives closerFS something to close when the caller kept the handle.

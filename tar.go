@@ -43,6 +43,14 @@ func openTar(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesyste
 		}
 		fs.add(h, counter.n)
 	}
+	// Refused HERE rather than at extraction, because extraction cannot see it:
+	// see refuseNestingUnderANonDirectory.
+	if err := refuseNestingUnderANonDirectory(fs.kids, func(p string) bool {
+		e, ok := fs.byPath[p]
+		return ok && e.dir
+	}); err != nil {
+		return nil, err
+	}
 	return fs, nil
 }
 
@@ -163,8 +171,14 @@ func (f *tarFS) ListDir(dir string) ([]filesystem.DirEntry, error) {
 			continue
 		}
 		var ftype uint8
-		if e.dir {
+		switch {
+		case e.dir:
 			ftype = fileTypeDir
+		case e.linkTarget != "":
+			// Declared, so Extract does not have to infer it from ReadLink alone.
+			// This reported 0 for everything that was not a directory, and every
+			// symbolic link in every tar came out as an empty regular file.
+			ftype = fileTypeSymlink
 		}
 		out = append(out, filesystem.NewDirEntry(uint64(i+1), e.name, ftype))
 	}

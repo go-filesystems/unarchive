@@ -38,7 +38,7 @@ type record struct {
 // Directories that no record mentions are SYNTHESISED. cpio usually lists its
 // directories and ar has none at all, so a member called "usr/bin/tool" has to
 // put usr and usr/bin somewhere, or a walk of the root finds nothing.
-func newIndexFS(ra io.ReaderAt, recs []record) iofs.FS {
+func newIndexFS(ra io.ReaderAt, recs []record) (iofs.FS, error) {
 	f := &indexFS{ra: ra, byName: map[string]*record{}, kids: map[string][]string{}}
 	for i := range recs {
 		r := recs[i]
@@ -59,7 +59,16 @@ func newIndexFS(ra io.ReaderAt, recs []record) iofs.FS {
 			}
 		}
 	}
-	return f
+	// Refused HERE rather than at extraction, because extraction cannot see it:
+	// see refuseNestingUnderANonDirectory. This index backs cpio and ar, and the
+	// same shape reaches it from a zip or a 7z through FromFS.
+	if err := refuseNestingUnderANonDirectory(f.kids, func(p string) bool {
+		r, ok := f.byName[p]
+		return ok && r.mode.IsDir()
+	}); err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 // indexClean is the one spelling of a name this index uses.
