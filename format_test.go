@@ -95,23 +95,36 @@ func TestRAR5IsNotReadAsRAR4(t *testing.T) {
 // before it can decide what to do next. A format missing from Compressed() looks
 // like an archive to everything that asks.
 //
-// ⛔ It KEEPS THE COUNT now. The two lists held four wrappers and five others and
-// had drifted past lz4, .Z, ar, cpio, iso9660, squashfs and ptar -- seven formats
-// this asked nothing about, while reading as though it covered them. An ablation
-// that dropped .Z from Compressed() stayed green.
+// ⛔ It KEEPS THE COUNT. The two lists held four wrappers and five others and had
+// drifted past lz4, .Z, ar, cpio, iso9660, squashfs and ptar -- seven formats this
+// asked nothing about, while reading as though it covered them. An ablation that
+// dropped .Z from Compressed() stayed green.
 //
-// A format added to the sniffer now lands in neither list, the count fails, and
-// somebody decides.
+// ⛔⛔ And the count itself drifted, the same way, for the same reason: it was a
+// number written by hand, so the two lists were compared against something the
+// test author controls rather than against the package. Eight more formats were
+// added and it still said 16, and all of them went unasked about -- an ablation
+// that dropped lzo and lzip from Compressed() stayed green. The count is now read
+// out of format.go's declarations; see TestTheFormatCountIsReadNotDeclared.
 func TestCompressedNamesTheWrappers(t *testing.T) {
-	wrappers := []Format{FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4, FormatZ}
+	wrappers := []Format{
+		FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4, FormatZ,
+		FormatLZO, FormatLzip,
+	}
 	others := []Format{
 		FormatUnknown, FormatRAR, FormatZIP, Format7z, FormatTar, FormatAr,
 		FormatCpio, FormatISO9660, FormatSquashFS, FormatPtar,
+		FormatHFSPlus, FormatDMG,
+		// A .dmg is a container and a wrapper is a container, and they are still
+		// not the same thing: a wrapper holds one STREAM that openCompressed
+		// peels, a .dmg holds SECTORS that dmg decodes. Compressed() decides
+		// which door openAt takes, so answering true here would send a koly
+		// trailer to a gzip reader.
+		FormatXAR, FormatCAB, FormatRPM, FormatWARC,
 	}
-	const declared = 16 // every Format constant
-	if got := len(wrappers) + len(others); got != declared {
+	if got := len(wrappers) + len(others); got != formatsInThisPackage {
 		t.Errorf("%d formats accounted for, %d declared: one was added to the "+
-			"sniffer without anyone deciding whether it wraps a stream", got, declared)
+			"sniffer without anyone deciding whether it wraps a stream", got, formatsInThisPackage)
 	}
 	for _, f := range wrappers {
 		if !f.Compressed() {

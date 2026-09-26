@@ -209,13 +209,19 @@ func TestConvertWritesTheTargetAndRefusesWhatItCannot(t *testing.T) {
 
 	// A format that is read and not written, and it must say so BEFORE reading
 	// the archive: the check is on the target's name.
-	err = run([]string{"-o", filepath.Join(dir, "no.rar"), archive}, &out, &errOut)
+	//
+	// ⛔ A .tar.Z, not a .rar. This was .rar until go-filesystems/rar shipped a
+	// stored-only writer; .rar now WRITES, so using it here stopped testing a
+	// refusal and started testing a success that happened to be asserted as a
+	// failure. compress(1)'s .Z is the format that is genuinely read and not
+	// written, and it is the last one.
+	err = run([]string{"-o", filepath.Join(dir, "no.tar.Z"), archive}, &out, &errOut)
 	if !errors.Is(err, unarchive.ErrCannotWrite) {
-		t.Errorf("-o no.rar gave %v, want ErrCannotWrite", err)
+		t.Errorf("-o no.tar.Z gave %v, want ErrCannotWrite", err)
 	}
 
 	// And it says so BEFORE looking at the source, which matters when the source
-	// is 4 GiB: "I cannot write .rar" should not take a minute to arrive.
+	// is 4 GiB: "I cannot write a .Z" should not take a minute to arrive.
 	//
 	// The discriminator is a source that is not an archive AT ALL. Check the
 	// target first and the error is about the target; open the source first and
@@ -228,12 +234,28 @@ func TestConvertWritesTheTargetAndRefusesWhatItCannot(t *testing.T) {
 	if err := os.WriteFile(notAnArchive, []byte("nothing archival about this"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err = run([]string{"-o", filepath.Join(dir, "no.rar"), notAnArchive}, &out, &errOut)
+	err = run([]string{"-o", filepath.Join(dir, "no.tar.Z"), notAnArchive}, &out, &errOut)
 	if errors.Is(err, unarchive.ErrUnknownFormat) {
 		t.Errorf("the source was read before the target was judged: %v", err)
 	}
 	if !errors.Is(err, unarchive.ErrCannotWrite) {
 		t.Errorf("gave %v, want ErrCannotWrite about the target", err)
+	}
+
+	// A .rar, which now writes -- and whose note must reach the person choosing
+	// it, because "no compression at all" is not something to discover from the
+	// output size.
+	out.Reset()
+	rarTarget := filepath.Join(dir, "stored.rar")
+	if err := run([]string{"-o", rarTarget, archive}, &out, &errOut); err != nil {
+		t.Errorf("-o stored.rar gave %v, want nil", err)
+	}
+	if st, err := os.Stat(rarTarget); err != nil || st.Size() == 0 {
+		t.Errorf("stored.rar: %v (size %v)", err, st)
+	}
+	if !strings.Contains(out.String(), "no compression") {
+		t.Errorf("converting to .rar printed %q, and it has to say that the "+
+			"archive goes out uncompressed", out.String())
 	}
 
 	// One target means one source.

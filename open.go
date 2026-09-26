@@ -65,8 +65,29 @@ func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 		}
 		return fsys, format, nil
 	}
+	// Read from the open handle like an image, and CLOSED unlike one: see
+	// openReaderArchive for why the two cannot share a branch.
+	if format.ReaderArchive() {
+		fsys, err := openReaderArchive(f, size, f, format)
+		if err != nil {
+			f.Close()
+			return nil, format, fmt.Errorf("%s: %w", path, err)
+		}
+		return fsys, format, nil
+	}
 	if err := f.Close(); err != nil {
 		return nil, format, err
+	}
+	// Asked as a QUESTION rather than listed again, for the reason the split
+	// branch below gives: Compressed() used to name these formats a second time,
+	// so the predicate and this switch were two doors to one semantics -- and
+	// nothing in the package went through the predicate at all, which is how
+	// dropping two formats from it changed no behaviour and failed no test.
+	if format.Compressed() {
+		// A wrapper holds ONE stream, and what is in it is another question:
+		// usually a tar, sometimes a single ordinary file, occasionally another
+		// archive entirely. openCompressed peels it and asks again.
+		return openCompressed(path, format, depth)
 	}
 	switch format {
 	case FormatZIP:
@@ -119,11 +140,6 @@ func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 			return nil, format, fmt.Errorf("%s: %w", path, err)
 		}
 		return fsys, format, nil
-	case FormatGzip, FormatBzip2, FormatXZ, FormatZstd, FormatLZ4, FormatZ:
-		// A wrapper holds ONE stream, and what is in it is another question:
-		// usually a tar, sometimes a single ordinary file, occasionally another
-		// archive entirely. openCompressed peels it and asks again.
-		return openCompressed(path, format, depth)
 	case FormatDMG:
 		// A container, not an image: peeled like a wrapper and what comes out is
 		// sniffed. See openDMG.
@@ -284,11 +300,19 @@ func openSplit(parts []string) (filesystem.Filesystem, Format, error) {
 	// and squashfs a second time, so Image() and this switch were two doors to
 	// one semantics: adding a driver to one left a split of it falling through
 	// to "not implemented", which is a wrong answer rather than a missing one.
-	if format.Image() {
-		fsys, err := openImageAt(j, j.Size(), format)
+	if format.Image() || format.ReaderArchive() {
+		open := openImageAt
+		if format.ReaderArchive() {
+			open = openReaderArchiveAt
+		}
+		fsys, err := open(j, j.Size(), format)
 		if err != nil {
 			return fail(err)
 		}
+		// The joined reader is closed here for BOTH kinds, and that is right for
+		// both: an image driver adopts what it is given, and j is not the file --
+		// it is this package's own reader over the parts, which nothing else
+		// holds.
 		return &closerFS{Filesystem: fsys, closer: j}, format, nil
 	}
 	return fail(fmt.Errorf("%s across %d parts: %w", format, len(parts), ErrNotImplemented))

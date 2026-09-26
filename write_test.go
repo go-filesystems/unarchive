@@ -263,7 +263,10 @@ func TestTargetForNamesWhatItCannotWrite(t *testing.T) {
 		{"out.bz2", FormatTar, FormatBzip2, nil},
 		// The only format left that is read and not written, and the only one
 		// whose reason will not change here: no free writer exists.
-		{"out.rar", FormatRAR, FormatUnknown, ErrCannotWrite},
+		// Writable since go-filesystems/rar shipped a stored-only writer. What
+		// it CANNOT do is compress, and that is said through Format.Note rather
+		// than by refusing the write.
+		{"out.rar", FormatRAR, FormatUnknown, nil},
 		{"out.a", FormatAr, FormatUnknown, nil},
 		{"out.deb", FormatAr, FormatUnknown, nil},
 		{"out.cpio", FormatCpio, FormatUnknown, nil},
@@ -299,13 +302,18 @@ func TestSealToLeavesAnExistingTargetAloneWhenItFails(t *testing.T) {
 	}
 	defer o.Close()
 
-	existing := filepath.Join(t.TempDir(), "precious.rar")
+	// ⛔ A .Z, not a .rar. This case needs a format the package genuinely cannot
+	// write, and .rar stopped being one: it now writes, stored. Leaving it here
+	// turned a test about an atomic rename into a test that overwrote the file it
+	// was asserting about, and it said so -- the "held" bytes came back as a real
+	// RAR archive.
+	existing := filepath.Join(t.TempDir(), "precious.tar.Z")
 	const held = "something that was already here"
 	if err := os.WriteFile(existing, []byte(held), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := SealTo(o, existing); !errors.Is(err, ErrCannotWrite) {
-		t.Errorf("SealTo to a .rar gave %v, want ErrCannotWrite", err)
+		t.Errorf("SealTo to a .tar.Z gave %v, want ErrCannotWrite", err)
 	}
 	got, err := os.ReadFile(existing)
 	if err != nil {

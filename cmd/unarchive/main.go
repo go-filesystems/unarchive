@@ -87,7 +87,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 // interruption leaves both the source and whatever the target held before
 // exactly as they were.
 func convert(arg, target string, force, quiet bool, stdout io.Writer) error {
-	// Asked FIRST, before any work: "I cannot write .rar" should arrive
+	// Asked FIRST, before any work: "I cannot write a .Z" should arrive
 	// immediately, not after reading a 4 GiB archive.
 	t, err := unarchive.TargetFor(target)
 	if err != nil {
@@ -104,6 +104,13 @@ func convert(arg, target string, force, quiet bool, stdout io.Writer) error {
 	if !quiet {
 		fmt.Fprintf(stdout, "%s: %s -> %s: %s\n",
 			filepath.Base(arg), format, filepath.Base(target), t)
+		// A format this package writes with a caveat says so HERE, where somebody
+		// is choosing the output. .rar is the case: it goes out stored, and
+		// finding that out from the file sizes afterwards is finding it out too
+		// late.
+		if note := t.Archive.Note(); note != "" {
+			fmt.Fprintf(stdout, "  note: %s is %s\n", t.Archive, note)
+		}
 	}
 	if err := unarchive.SealTo(o, target); err != nil {
 		return err
