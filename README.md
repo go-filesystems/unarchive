@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/go-filesystems/brand/main/social/go-filesystems-unarchive.png" alt="go-filesystems/unarchive" width="720"></p>
+
 # unarchive
 
 Open an archive without being told what it is, and extract it while checking
