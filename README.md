@@ -27,7 +27,7 @@ unarchive -o disc.7z disc.iso     # yes, that works
 | 7z | ✅ | follows its own `.001` chain, by name |
 | tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access |
 | ar | ✅ | static libraries **and `.deb`** — both long-name spellings, SysV and BSD |
-| cpio | ✅ | `newc`, `crc` and `odc` — an initramfs, an RPM's payload |
+| cpio | ✅ | `newc`, `crc`, `odc` **and the old binary variant, both byte orders** |
 | gzip, bzip2, xz, zstd, lz4 | ✅ | stream wrappers: `.tar.gz`, `.tgz`, `.tar.zst`, a lone `notes.txt.gz` … |
 | compress `.Z` | read only | the LZW `compress/lzw` cannot read — see below |
 | ISO 9660 | ✅ | a disc image is an archive too — read through `go-filesystems/iso9660` |

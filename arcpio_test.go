@@ -5,7 +5,6 @@ package unarchive
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	iofs "io/fs"
 	"os"
@@ -305,25 +304,6 @@ func TestACpioReadsThroughTheSystemsOwnCpio(t *testing.T) {
 				t.Errorf("ReadAt(290) = %q", buf)
 			}
 		})
-	}
-}
-
-// TestOldBinaryCpioIsRefusedBySaying: the fourth variant stores its magic as a
-// 16-bit word in the writer's byte order, so the same bytes mean different things
-// on different machines. Guessing is worse than refusing, and the refusal says
-// which of the three sentences it is.
-func TestOldBinaryCpioIsRefusedBySaying(t *testing.T) {
-	// 0o070707 as a little-endian uint16 is 0xC7 0x71.
-	img := append([]byte{0xC7, 0x71}, make([]byte, 200)...)
-	path := filepath.Join(t.TempDir(), "old.cpio")
-	if err := os.WriteFile(path, img, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// It is not even sniffed as cpio -- the ASCII magics do not match -- so this
-	// records what actually happens rather than what would be nice.
-	_, _, err := Open(path)
-	if !errors.Is(err, ErrUnknownFormat) {
-		t.Errorf("Open = %v, want ErrUnknownFormat: old binary cpio has no ASCII magic", err)
 	}
 }
 

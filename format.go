@@ -116,6 +116,12 @@ var signatures = []signature{
 	{FormatCpio, 0, []byte("070701")},
 	{FormatCpio, 0, []byte("070702")},
 	{FormatCpio, 0, []byte("070707")},
+	// The old binary variant's magic is 0o070707 as a 16-bit WORD, so it is two
+	// bytes and there are two of them: the same value on a little-endian machine
+	// and on a big-endian one. Listing only one reads half the archives in the
+	// world and refuses the other half.
+	{FormatCpio, 0, []byte{0xC7, 0x71}},
+	{FormatCpio, 0, []byte{0x71, 0xC7}},
 	// tar carries no magic at the start: its identity sits 257 bytes in, which
 	// is why a tar is so often guessed at by extension instead of read.
 	{FormatTar, 257, []byte("ustar")},
