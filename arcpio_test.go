@@ -314,11 +314,14 @@ func TestACpioReadsThroughTheSystemsOwnCpio(t *testing.T) {
 // means the synthesis has to run after the records and not instead of them.
 func TestIndexFSSynthesisesParentsAndKeepsDeclaredModes(t *testing.T) {
 	data := []byte("0123456789")
-	fsys := newIndexFS(bytes.NewReader(data), []record{
+	fsys, err := newIndexFS(bytes.NewReader(data), []record{
 		{name: "usr/bin/tool", mode: 0o755, size: 4, offset: 2},
 		{name: "etc", mode: iofs.ModeDir | 0o700},
 		{name: "etc/conf", mode: 0o600, size: 3, offset: 0},
 	})
+	if err != nil {
+		t.Fatalf("newIndexFS: %v", err)
+	}
 
 	for _, c := range []struct {
 		name string
