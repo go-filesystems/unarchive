@@ -10,14 +10,14 @@ require (
 	github.com/go-compressions/lzo v0.1.0
 	github.com/go-diskimages/dmg v0.2.2
 	github.com/go-filesystems/cab v0.1.0
-	github.com/go-filesystems/cpio v0.2.0
+	github.com/go-filesystems/cpio v0.5.0
 	github.com/go-filesystems/detect v0.1.0
 	github.com/go-filesystems/hfsplus v0.3.0
 	github.com/go-filesystems/interface v0.3.0
 	github.com/go-filesystems/iso9660 v0.3.0
 	github.com/go-filesystems/overlay v0.2.0
 	github.com/go-filesystems/rar v0.1.0
-	github.com/go-filesystems/rpm v0.1.0
+	github.com/go-filesystems/rpm v0.2.0
 	github.com/go-filesystems/sevenzip v0.2.0
 	github.com/go-filesystems/squashfs v0.3.0
 	github.com/go-filesystems/warc v0.1.0
