@@ -59,6 +59,14 @@ const (
 	// two, on purpose.
 	FormatISO9660  Format = "iso9660"
 	FormatSquashFS Format = "squashfs"
+	// HFS+ is here for the same reason: it is what a .dmg made before APFS
+	// holds, so it is a format people receive rather than one they administer.
+	FormatHFSPlus Format = "hfsplus"
+	// A UDIF disk image -- a .dmg -- which is a CONTAINER around one of the
+	// images above rather than an image itself. Its sectors are compressed and
+	// may be stored out of order, so there is nothing for a driver to read in
+	// place; it is peeled like a stream wrapper and what comes out is sniffed.
+	FormatDMG Format = "dmg"
 	// Recognised and deliberately not unpacked. See Format.Note.
 	FormatPtar Format = "ptar"
 )
@@ -142,6 +150,18 @@ const sniffLen = 262
 // knows a dozen filesystems -- so duplicating the two entries this package opens
 // would mean re-deriving something deliberately hardened, and would drift from it.
 func Sniff(r io.ReaderAt, size int64) (Format, error) {
+	// A UDIF image is named by its LAST 512 bytes, so it is asked about before
+	// anything reads the head -- and it has to be. A UDIF whose sectors are
+	// stored raw begins with the inner filesystem itself, so the probers below
+	// would recognise that filesystem and open it in place, reading right past
+	// the container. That is the wrong answer even when it happens to work: the
+	// same image written sparse or compressed would then be unreadable, and a
+	// caller asking what it is holding would be told the inside rather than the
+	// outside.
+	if hasUDIFTrailer(r, size) {
+		return FormatDMG, nil
+	}
+
 	head := make([]byte, sniffLen)
 	n, err := r.ReadAt(head, 0)
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -168,6 +188,8 @@ func Sniff(r io.ReaderAt, size int64) (Format, error) {
 		return FormatISO9660, nil
 	case t == detect.SquashFS:
 		return FormatSquashFS, nil
+	case t == detect.HFSPlus:
+		return FormatHFSPlus, nil
 	default:
 		// A filesystem detect knows and this package does not open: say WHICH,
 		// because "unknown" would be false and unhelpful in the same breath.
@@ -205,10 +227,34 @@ func (f Format) Note() string {
 // file in place.
 func (f Format) Image() bool {
 	switch f {
-	case FormatISO9660, FormatSquashFS:
+	case FormatISO9660, FormatSquashFS, FormatHFSPlus:
 		return true
 	}
 	return false
+}
+
+// udifTrailerLen is the length of the koly block a UDIF image ends with, and
+// udifTrailerMagic is what it starts with.
+const udifTrailerLen = 512
+
+var udifTrailerMagic = []byte("koly")
+
+// hasUDIFTrailer says whether the bytes end in a koly block.
+//
+// It answers false for every error rather than reporting one, because "this is
+// not a UDIF image" is the only thing a caller of Sniff can do with a failure
+// here: a file too short to hold a trailer, or a reader that will not seek to
+// the end, is not a .dmg either way. A real read failure surfaces a few lines
+// later, where the head is read and the error IS returned.
+func hasUDIFTrailer(r io.ReaderAt, size int64) bool {
+	if size < udifTrailerLen {
+		return false
+	}
+	magic := make([]byte, len(udifTrailerMagic))
+	if _, err := r.ReadAt(magic, size-udifTrailerLen); err != nil {
+		return false
+	}
+	return bytes.Equal(magic, udifTrailerMagic)
 }
 
 // Compressed says whether a format is a stream wrapper rather than an archive

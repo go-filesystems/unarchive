@@ -32,6 +32,8 @@ unarchive -o disc.7z disc.iso     # yes, that works
 | compress `.Z` | read only | the LZW `compress/lzw` cannot read — see below |
 | ISO 9660 | ✅ | a disc image is an archive too — read through `go-filesystems/iso9660` |
 | SquashFS | ✅ | likewise, through `go-filesystems/squashfs` |
+| HFS+ | ✅ | what a `.dmg` held before APFS — through `go-filesystems/hfsplus` |
+| DMG | ✅ | a UDIF *container* around one of the above: peeled, then sniffed |
 | plakar `.ptar` | recognised, not unpacked | and the reason is below |
 
 A **numbered split** — `film.zip.001`, `.002`, … — is read as one file, whatever
@@ -122,10 +124,37 @@ them**: `go-filesystems` already owns those drivers, and the detection is
 `go-filesystems/detect`'s hardened prober rather than a second magic table
 written here.
 
-The line is drawn at formats people **distribute**. You download an `.iso` and
-you ship a `.squashfs`; you do not hand somebody an ext4 image expecting them to
-unpack it. The org has drivers for a dozen more filesystems and this opens two,
-on purpose.
+The line is drawn at formats people **distribute**. You download an `.iso`, you
+ship a `.squashfs`, somebody sends you a `.dmg`; you do not hand somebody an ext4
+image expecting them to unpack it. The org has drivers for a dozen more
+filesystems and this opens three, on purpose.
+
+### A `.dmg` is not one of them — it is a container around one
+
+Its sectors are compressed and may be stored out of order, so there is nothing
+for a driver to read in place. It is peeled like a stream wrapper: the sectors are
+decoded to a spool through `go-diskimages/dmg`, and the spool is **sniffed**,
+because a `.dmg` holds HFS+, or APFS, or an ISO 9660, and the container does not
+record which.
+
+Two consequences worth stating rather than discovering:
+
+- **An unrecognised spool is an error, not a one-entry directory.** A `.gz`
+  legitimately holds one ordinary file and `openCompressed` hands that back as
+  such; a UDIF image never does — its sectors are a filesystem or they are
+  nothing. APFS is the case this matters for: `detect` names it and no driver here
+  opens it, and that sentence is more useful than a megabyte of raw sectors
+  presented as an archive of one file.
+- **A partition map is not handled.** An image carrying one holds a table where a
+  filesystem's magic would be, so the sniff finds nothing and says so, naming the
+  `.dmg` it came out of. Splitting that apart is a volume manager's job, and
+  `go-volumes` has one.
+
+The trailer is what names a UDIF, and it has to be: a `.dmg` whose sectors are
+stored raw *begins* with the filesystem inside it, so a prober reading only the
+head would recognise that filesystem and read straight past the container. That
+is the wrong answer even when it works — the same image written sparse or
+compressed would then be unreadable.
 
 ## Why the bytes and not the name
 
