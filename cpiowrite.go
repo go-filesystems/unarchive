@@ -5,6 +5,7 @@ package unarchive
 
 import (
 	"fmt"
+	"github.com/go-filesystems/cpio"
 	"io"
 	iofs "io/fs"
 )
@@ -53,7 +54,7 @@ func (b *cpioBuilder) entry(name string, mode uint32, nlink int, size int64, r i
 	}
 	nameBytes := append([]byte(name), 0)
 	h := fmt.Sprintf("%s%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X",
-		cpioNewc,
+		cpio.MagicNewc,
 		b.ino, // ino
 		mode,  // mode, with the POSIX type bits
 		0, 0,  // uid, gid
@@ -93,7 +94,7 @@ func (b *cpioBuilder) Close() error {
 	}
 	b.ended = true
 	// nlink 1, mode 0: the trailer is not a file and carries nothing.
-	if err := b.entry(cpioTrailer, 0, 1, 0, nil); err != nil {
+	if err := b.entry(cpio.TrailerName, 0, 1, 0, nil); err != nil {
 		return err
 	}
 	// An initramfs is padded to a block, and a plain cpio need not be. Nothing is
@@ -118,3 +119,8 @@ func (b *cpioBuilder) pad() error {
 	}
 	return nil
 }
+
+// cpioRound4 is newc's padding. It stays here rather than in go-filesystems/cpio
+// because it is arithmetic and not a fact about the format: the fact is "pad to
+// four", and the parser states that in its own words.
+func cpioRound4(n int64) int64 { return (n + 3) &^ 3 }

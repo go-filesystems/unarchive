@@ -27,6 +27,8 @@ github.com/go-diskimages/dmg v0.2.2 h1:jwlXV3SlUB/jV0S76c9X8Foy0K3onFcXYgTwCKwhH
 github.com/go-diskimages/dmg v0.2.2/go.mod h1:IV6Sk9El3DZgTOqwDoeSOPl0Vg8HJjpkqFnoh8861Xw=
 github.com/go-filesystems/cab v0.1.0 h1:FCsQ8eKNt6ab9XkScwd5CLisdiuLlS74Q8RfR9VXb4Q=
 github.com/go-filesystems/cab v0.1.0/go.mod h1:OTpWg9LUroZUk4XkTAiLaXFvsnwuLoYjqYVxVwmhQkU=
+github.com/go-filesystems/cpio v0.2.0 h1:YRpvHiIR2aTnvqrfGxWLwrLAMF8K/AtKEhQecJAaS3w=
+github.com/go-filesystems/cpio v0.2.0/go.mod h1:U2GeESYISoGKTeM617p0XLYabNpRL3uGoTUh+VkcBCA=
 github.com/go-filesystems/detect v0.1.0 h1:DCiR5lLKFJ/kon8wKs1ueG1hX27wJaIHqym+Ai0Y/pU=
 github.com/go-filesystems/detect v0.1.0/go.mod h1:OCGE1O8l2Z41PODXWkuJOin83ooqHWh439jSpOGWb/Q=
 github.com/go-filesystems/hfsplus v0.3.0 h1:Pc7w0t6YCSQjnXvTOYuHlfrM2MU+3BAnIniQCkEb0eE=

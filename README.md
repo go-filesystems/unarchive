@@ -27,7 +27,7 @@ unarchive -o disc.7z disc.iso     # yes, that works
 | 7z | ✅ | follows its own `.001` chain, by name |
 | tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access, **symbolic links included** |
 | ar | ✅ | static libraries **and `.deb`** — both long-name spellings, SysV and BSD |
-| cpio | ✅ | `newc`, `crc`, `odc` **and the old binary variant, both byte orders** |
+| cpio | ✅ | `newc`, `crc`, `odc` **and the old binary variant, both byte orders** — parsed by [`go-filesystems/cpio`](https://github.com/go-filesystems/cpio) |
 | gzip, bzip2, xz, zstd, lz4 | ✅ | stream wrappers: `.tar.gz`, `.tgz`, `.tar.zst`, a lone `notes.txt.gz` … |
 | lzop `.lzo` | ✅ | likewise, through `go-compressions/lzo` — LZO1X, no compressor |
 | lzip `.lz` | ✅ | likewise, through `go-compressions/lzip` — LZMA in lzip's framing, not xz's |
