@@ -4,6 +4,7 @@
 package unarchive
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	iofs "io/fs"
@@ -26,6 +27,18 @@ const (
 	cpioODC     = "070707" // POSIX.1 "odc": fields are 6 octal digits
 	cpioTrailer = "TRAILER!!!"
 )
+
+// cpioBinaryMagic is 0o070707 as a 16-bit WORD, which is what makes the old binary
+// format byte-order dependent: the same two bytes are 0o070707 on the machine that
+// wrote them and 0o143561 on one of the other endianness.
+//
+// So the order is DETECTED from the magic rather than assumed, and both are read.
+// Guessing silently misreads every field of an archive written on the other kind of
+// machine.
+const cpioBinaryMagic = 0o070707
+
+// cpioBinaryHeaderLen is thirteen 16-bit words.
+const cpioBinaryHeaderLen = 26
 
 // openCpio indexes a cpio archive.
 //
@@ -63,10 +76,21 @@ func openCpio(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesyst
 			recs = append(recs, *r)
 			off = next
 		default:
+			if order := cpioBinaryOrder(magic[:2]); order != nil {
+				r, next, err := cpioReadBinary(ra, size, off, order)
+				if err != nil {
+					return nil, err
+				}
+				if r == nil {
+					return cpioDone(ra, recs, closer)
+				}
+				recs = append(recs, *r)
+				off = next
+				continue
+			}
 			if off == 0 {
-				return nil, fmt.Errorf("cpio: %q is not an ASCII cpio magic "+
-					"(old binary cpio is byte-order dependent and not read here): %w",
-					magic, ErrNotImplemented)
+				return nil, fmt.Errorf("cpio: %q is no cpio magic this reads: %w",
+					magic, ErrUnknownFormat)
 			}
 			// Trailing padding after the trailer is normal: an initramfs is padded
 			// to a block. Anything else here is a malformed archive, and stopping
@@ -236,3 +260,71 @@ func cpioMode(m int64) iofs.FileMode {
 
 // cpioRound4 rounds up to the next multiple of four.
 func cpioRound4(n int64) int64 { return (n + 3) &^ 3 }
+
+// cpioBinaryOrder says which byte order reads these two bytes as the binary cpio
+// magic, or nil if neither does.
+func cpioBinaryOrder(b []byte) binary.ByteOrder {
+	if binary.LittleEndian.Uint16(b) == cpioBinaryMagic {
+		return binary.LittleEndian
+	}
+	if binary.BigEndian.Uint16(b) == cpioBinaryMagic {
+		return binary.BigEndian
+	}
+	return nil
+}
+
+// cpioReadBinary reads one old-binary header. A nil record means the trailer.
+//
+// ⛔ The 32-bit fields -- mtime and filesize -- are stored as TWO 16-bit words with
+// the HIGH word FIRST, whatever the byte order of each word is. That is a PDP-11
+// inheritance and it is independent of the endianness detected from the magic: a
+// reader that assembles them low-word-first gets an mtime in the far future and a
+// filesize that is either zero or enormous. Measured against cpio(1)'s own output,
+// where a six-byte file reads as the words (0, 6).
+//
+// The `bin` and `pwb` variants of cpio(1) on this machine produce BYTE-IDENTICAL
+// headers -- compared field by field -- so one implementation serves both. Worth
+// saying, because libarchive lists them separately.
+func cpioReadBinary(ra io.ReaderAt, size, off int64, order binary.ByteOrder) (*record, int64, error) {
+	if off+cpioBinaryHeaderLen > size {
+		return nil, 0, fmt.Errorf("cpio: binary header at %d runs past the end: %w",
+			off, ErrIncomplete)
+	}
+	h := make([]byte, cpioBinaryHeaderLen)
+	if _, err := ra.ReadAt(h, off); err != nil {
+		return nil, 0, err
+	}
+	word := func(i int) int64 { return int64(order.Uint16(h[i*2 : i*2+2])) }
+	long := func(i int) int64 { return word(i)<<16 | word(i+1) } // high word first
+
+	mode := word(3)
+	mtime := long(8)
+	nameSize := word(10)
+	fileSize := long(11)
+
+	if nameSize <= 0 || off+cpioBinaryHeaderLen+nameSize > size {
+		return nil, 0, fmt.Errorf("cpio: binary name at %d is %d bytes: %w",
+			off, nameSize, ErrIncomplete)
+	}
+	nameBuf := make([]byte, nameSize)
+	if _, err := ra.ReadAt(nameBuf, off+cpioBinaryHeaderLen); err != nil {
+		return nil, 0, err
+	}
+	name := strings.TrimRight(string(nameBuf), "\x00")
+
+	// The name and the data are each padded to an EVEN offset, not to four as newc
+	// does. Rounding to four reads the data two bytes late on half the entries.
+	dataOff := cpioRound2(off + cpioBinaryHeaderLen + nameSize)
+	next := cpioRound2(dataOff + fileSize)
+	if name == cpioTrailer {
+		return nil, next, nil
+	}
+	if dataOff+fileSize > size {
+		return nil, 0, fmt.Errorf("cpio: %s says %d bytes, past the end: %w",
+			name, fileSize, ErrIncomplete)
+	}
+	return cpioRecord(ra, name, mode, fileSize, dataOff, mtime, next)
+}
+
+// cpioRound2 rounds up to the next even number.
+func cpioRound2(n int64) int64 { return (n + 1) &^ 1 }
