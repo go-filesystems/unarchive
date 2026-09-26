@@ -27,8 +27,8 @@ github.com/go-diskimages/dmg v0.2.2 h1:jwlXV3SlUB/jV0S76c9X8Foy0K3onFcXYgTwCKwhH
 github.com/go-diskimages/dmg v0.2.2/go.mod h1:IV6Sk9El3DZgTOqwDoeSOPl0Vg8HJjpkqFnoh8861Xw=
 github.com/go-filesystems/cab v0.1.0 h1:FCsQ8eKNt6ab9XkScwd5CLisdiuLlS74Q8RfR9VXb4Q=
 github.com/go-filesystems/cab v0.1.0/go.mod h1:OTpWg9LUroZUk4XkTAiLaXFvsnwuLoYjqYVxVwmhQkU=
-github.com/go-filesystems/cpio v0.2.0 h1:YRpvHiIR2aTnvqrfGxWLwrLAMF8K/AtKEhQecJAaS3w=
-github.com/go-filesystems/cpio v0.2.0/go.mod h1:U2GeESYISoGKTeM617p0XLYabNpRL3uGoTUh+VkcBCA=
+github.com/go-filesystems/cpio v0.5.0 h1:/A9RX9Z7g3fu+iPKIxB39cHJ9TJzReca39fXMZmJCgE=
+github.com/go-filesystems/cpio v0.5.0/go.mod h1:U2GeESYISoGKTeM617p0XLYabNpRL3uGoTUh+VkcBCA=
 github.com/go-filesystems/detect v0.1.0 h1:DCiR5lLKFJ/kon8wKs1ueG1hX27wJaIHqym+Ai0Y/pU=
 github.com/go-filesystems/detect v0.1.0/go.mod h1:OCGE1O8l2Z41PODXWkuJOin83ooqHWh439jSpOGWb/Q=
 github.com/go-filesystems/hfsplus v0.3.0 h1:Pc7w0t6YCSQjnXvTOYuHlfrM2MU+3BAnIniQCkEb0eE=
@@ -41,8 +41,8 @@ github.com/go-filesystems/overlay v0.2.0 h1:3V+KYy5vAjccejZYQInRK0ObWPU9DffrykqT
 github.com/go-filesystems/overlay v0.2.0/go.mod h1:mL3v/2AsvvOgFyezM9Sz/R6w0KTOmwakZwywa5n8sEg=
 github.com/go-filesystems/rar v0.1.0 h1:SUPZqsRYSXs1Yi2GHQlBMmyYYYc4qlzWEWOjrJLMLGk=
 github.com/go-filesystems/rar v0.1.0/go.mod h1:Ozc4vz2SRaO4Qj/Dd/bCRe+kr0gAtjE0UUFKH4XouTI=
-github.com/go-filesystems/rpm v0.1.0 h1:jqJI3YvZidsNqr0PHTeto7MjeTDW8SGK4hiPD/sopw8=
-github.com/go-filesystems/rpm v0.1.0/go.mod h1:fYzQFOp879d4C3z1w0ioXLwoShRvVQ7LHjnKaCfucFQ=
+github.com/go-filesystems/rpm v0.2.0 h1:LERvNRH40MDzfw2HyaEX4H78n7/zWx1hT20xfM2k27s=
+github.com/go-filesystems/rpm v0.2.0/go.mod h1:1yqgCHBPsbStmveec4RK7jkcbzf2JJsXhrbEJDd8F3s=
 github.com/go-filesystems/sevenzip v0.2.0 h1:5KlIeORCagr8fPfacgJq8aDxbejpEpnkmOQACU5T820=
 github.com/go-filesystems/sevenzip v0.2.0/go.mod h1:37FQxYhLAa+1AvilOcKz/2v/DZCXEg7Zi5gEJTaHXpI=
 github.com/go-filesystems/squashfs v0.3.0 h1:4Mp88Zx3lVLX+CpIN84f28V8NRmyntv172GWBdKUb8w=
