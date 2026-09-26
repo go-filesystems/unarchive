@@ -73,7 +73,12 @@ func TestTheOldBinaryCpioReadsThroughTheSystemsOwnCpio(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(head) < 2 || cpioBinaryOrder(head[:2]) == nil {
+			// 0o070707 as a 16-bit word, either way round: 0o070707 little-endian
+			// or 0o143561, which is the same two bytes reversed.
+			isBinary := len(head) >= 2 &&
+				(binary.LittleEndian.Uint16(head[:2]) == 0o070707 ||
+					binary.LittleEndian.Uint16(head[:2]) == 0o143561)
+			if !isBinary {
 				t.Fatalf("%s does not begin with a binary cpio magic (% x): this "+
 					"fixture exercises nothing", archive, head[:min(4, len(head))])
 			}
@@ -110,72 +115,12 @@ func TestTheOldBinaryCpioReadsThroughTheSystemsOwnCpio(t *testing.T) {
 	}
 }
 
-// TestABigEndianBinaryCpioIsReadToo.
+// The hand-built big-endian archive that used to sit here has moved to
+// go-filesystems/cpio, which owns the parser now and carries bin-swapped.cpio --
+// byte-swapped from cpio(1)'s own output rather than written from scratch, so it is
+// less of a fixture of our own making than this one was.
 //
-// ⛔ Nothing on this machine writes one: cpio(1) here emits little-endian words,
-// so the fixture is BUILT BY HAND from the same header layout, with every 16-bit
-// word byte-swapped. That is stated rather than hidden -- a fixture of our own
-// making cannot fail the way a real archive can.
-//
-// It is worth having anyway, because the whole reason the byte order is DETECTED
-// rather than assumed is that archives written on the other kind of machine exist,
-// and a reader that handles only one silently misreads every field of the other.
-func TestABigEndianBinaryCpioIsReadToo(t *testing.T) {
-	const name = "swapped.txt"
-	body := []byte("written on a big-endian machine")
-
-	var b bytes.Buffer
-	put := func(v uint16) { _ = binary.Write(&b, binary.BigEndian, v) }
-	entry := func(n string, mode uint16, data []byte) {
-		nameBytes := append([]byte(n), 0)
-		put(cpioBinaryMagic)         // magic
-		put(0)                       // dev
-		put(1)                       // ino
-		put(mode)                    // mode
-		put(0)                       // uid
-		put(0)                       // gid
-		put(1)                       // nlink
-		put(0)                       // rdev
-		put(0)                       // mtime, HIGH word first
-		put(0)                       // mtime, low
-		put(uint16(len(nameBytes)))  // namesize, with the NUL
-		put(uint16(len(data) >> 16)) // filesize, HIGH word first
-		put(uint16(len(data)))       // filesize, low
-		b.Write(nameBytes)
-		if len(nameBytes)%2 == 1 {
-			b.WriteByte(0)
-		}
-		b.Write(data)
-		if len(data)%2 == 1 {
-			b.WriteByte(0)
-		}
-	}
-	entry(name, 0o100644, body)
-	entry(cpioTrailer, 0, nil)
-
-	path := filepath.Join(t.TempDir(), "be.cpio")
-	if err := os.WriteFile(path, b.Bytes(), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// The premise: these bytes really are the big-endian spelling, and NOT the
-	// little-endian one -- otherwise the test proves nothing about the detection.
-	if binary.LittleEndian.Uint16(b.Bytes()[:2]) == cpioBinaryMagic {
-		t.Fatal("the fixture reads as little-endian too, so the detection is untested")
-	}
-
-	fsys, format, err := Open(path)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer fsys.Close()
-	if format != FormatCpio {
-		t.Errorf("format = %v, want cpio", format)
-	}
-	got, err := fsys.ReadFile(name)
-	if err != nil {
-		t.Fatalf("%s: %v", name, err)
-	}
-	if !bytes.Equal(got, body) {
-		t.Errorf("read back %q, want %q", got, body)
-	}
-}
+// What stays here is the test above, which is about the ROUTE: bytes carrying a
+// binary cpio magic reach the parser and the files come back. The byte order, the
+// field widths and the even-length padding are the parser's business and are tested
+// where the parser lives.

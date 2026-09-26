@@ -5,7 +5,9 @@ package unarchive
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"github.com/go-filesystems/cpio"
 	iofs "io/fs"
 	"os"
 	"os/exec"
@@ -358,5 +360,96 @@ func TestIndexFSSynthesisesParentsAndKeepsDeclaredModes(t *testing.T) {
 		return err
 	}); err != nil {
 		t.Errorf("WalkDir: %v", err)
+	}
+}
+
+// TestACpioThisCannotParseAnswersThisPackagesSentinel.
+//
+// ⛔ go-filesystems/cpio has sentinels of its own -- ErrNotCpio, ErrTruncated -- and
+// a caller of this package matches on ITS sentinels. The translation is what keeps
+// "is this a format you know" answerable without knowing cpio's spelling of no, and
+// an ablation that removed it passed the whole suite.
+//
+// The bytes have to sniff as cpio and then fail to parse, which is what makes this
+// reachable at all: Sniff decides before openCpio is called.
+func TestACpioThisCannotParseAnswersThisPackagesSentinel(t *testing.T) {
+	dir := t.TempDir()
+
+	// Six bytes of newc magic and nothing else: recognised, then truncated.
+	short := filepath.Join(dir, "short.cpio")
+	if err := os.WriteFile(short, []byte("070701"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Open(short); !errors.Is(err, ErrIncomplete) {
+		t.Errorf("a truncated cpio gave %v, want ErrIncomplete", err)
+	}
+
+	// A full newc header of digits that do not parse: recognised by its magic, and
+	// then not a cpio at all.
+	garbage := append([]byte("070701"), bytes.Repeat([]byte("z"), 110)...)
+	bad := filepath.Join(dir, "bad.cpio")
+	if err := os.WriteFile(bad, garbage, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := Open(bad)
+	if err == nil {
+		t.Fatal("a header of non-digits was accepted")
+	}
+	// Either sentinel is right for this one -- what must NOT happen is cpio's own
+	// escaping into a caller that has never heard of it.
+	if errors.Is(err, cpio.ErrNotCpio) || errors.Is(err, cpio.ErrTruncated) {
+		t.Errorf("err = %v, and it is the parser's sentinel rather than this "+
+			"package's: a caller matching ErrUnknownFormat sees nothing", err)
+	}
+}
+
+// TestACpioHoldingOnlyItsTrailer.
+//
+// This is the one route to cpio.ErrNotCpio through Open: Sniff has already matched
+// the magic, so the parser cannot answer "not a cpio" about the bytes -- only about
+// the CONTENTS, when the first record it meets is the trailer and there is nothing
+// else.
+//
+// ⚠ Answering ErrUnknownFormat for a valid empty archive is arguable, and it is what
+// this package has always done -- a tar with no entries opens and lists nothing.
+// Preserved here rather than changed, because changing it belongs in its own change
+// with its own argument. What IS asserted is that the answer is THIS package's
+// sentinel and not the parser's.
+func TestACpioHoldingOnlyItsTrailer(t *testing.T) {
+	bin, err := exec.LookPath("cpio")
+	if err != nil {
+		t.Skip("no cpio here to write an empty archive with")
+	}
+	cmd := exec.Command(bin, "-o", "-H", "newc")
+	cmd.Stdin = strings.NewReader("")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Skipf("cpio -o over no names: %v", err)
+	}
+	// Premise: it really is an empty archive -- the magic is there and the only
+	// record is the trailer.
+	if len(out) < 6 || string(out[:6]) != cpio.MagicNewc {
+		t.Fatalf("cpio wrote %d bytes beginning % x, which is not a newc archive",
+			len(out), out[:min(6, len(out))])
+	}
+	if !bytes.Contains(out, []byte(cpio.TrailerName)) {
+		t.Fatal("the archive holds no trailer, so it is not the empty case")
+	}
+
+	path := filepath.Join(t.TempDir(), "empty.cpio")
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = Open(path)
+	if err == nil {
+		t.Fatal("an archive holding only its trailer was opened; if that is now " +
+			"wanted, this test is the place to say so")
+	}
+	if errors.Is(err, cpio.ErrNotCpio) {
+		t.Errorf("err = %v, and it is the parser's sentinel: a caller matching "+
+			"ErrUnknownFormat sees nothing", err)
+	}
+	if !errors.Is(err, ErrUnknownFormat) {
+		t.Errorf("err = %v, want ErrUnknownFormat", err)
 	}
 }

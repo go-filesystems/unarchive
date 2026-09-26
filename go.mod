@@ -10,6 +10,7 @@ require (
 	github.com/go-compressions/lzo v0.1.0
 	github.com/go-diskimages/dmg v0.2.2
 	github.com/go-filesystems/cab v0.1.0
+	github.com/go-filesystems/cpio v0.2.0
 	github.com/go-filesystems/detect v0.1.0
 	github.com/go-filesystems/hfsplus v0.3.0
 	github.com/go-filesystems/interface v0.3.0

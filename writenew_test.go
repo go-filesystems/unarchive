@@ -5,6 +5,7 @@ package unarchive
 
 import (
 	"bytes"
+	"github.com/go-filesystems/cpio"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -284,7 +285,7 @@ func cpioCheckTypes(t *testing.T, path string) int {
 	}
 	checked := 0
 	for off := 0; off+110 <= len(raw); {
-		if string(raw[off:off+6]) != cpioNewc {
+		if string(raw[off:off+6]) != cpio.MagicNewc {
 			break
 		}
 		mode := hex(off+14, 8)
@@ -294,7 +295,7 @@ func cpioCheckTypes(t *testing.T, path string) int {
 			t.Fatalf("name at %d runs past the end", off)
 		}
 		name := strings.TrimRight(string(raw[off+110:off+110+int(nameSize)]), "\x00")
-		if name != cpioTrailer {
+		if name != cpio.TrailerName {
 			switch mode & 0o170000 {
 			case 0o100000, 0o040000:
 			default:
