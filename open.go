@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/go-filesystems/hfsplus"
 	filesystem "github.com/go-filesystems/interface"
 	"github.com/go-filesystems/iso9660"
 	"github.com/go-filesystems/rar"
@@ -123,6 +124,10 @@ func openAt(path string, depth int) (filesystem.Filesystem, Format, error) {
 		// usually a tar, sometimes a single ordinary file, occasionally another
 		// archive entirely. openCompressed peels it and asks again.
 		return openCompressed(path, format, depth)
+	case FormatDMG:
+		// A container, not an image: peeled like a wrapper and what comes out is
+		// sniffed. See openDMG.
+		return openDMG(path, depth)
 	case FormatAr, FormatCpio:
 		// Both are contiguous and uncompressed, like tar, so they get the same
 		// treatment: index once, then a read is a read. The file stays open
@@ -219,6 +224,8 @@ func openImageAt(r io.ReaderAt, size int64, format Format) (filesystem.Filesyste
 		return iso9660.OpenReader(r, size)
 	case FormatSquashFS:
 		return squashfs.OpenReader(r, size)
+	case FormatHFSPlus:
+		return hfsplus.OpenReader(r, size)
 	}
 	return nil, fmt.Errorf("%s: %w", format, ErrNotImplemented)
 }
@@ -272,7 +279,12 @@ func openSplit(parts []string) (filesystem.Filesystem, Format, error) {
 			return fail(err)
 		}
 		return fsys, format, nil
-	case FormatISO9660, FormatSquashFS:
+	}
+	// Asked as a QUESTION rather than listed again. This used to name iso9660
+	// and squashfs a second time, so Image() and this switch were two doors to
+	// one semantics: adding a driver to one left a split of it falling through
+	// to "not implemented", which is a wrong answer rather than a missing one.
+	if format.Image() {
 		fsys, err := openImageAt(j, j.Size(), format)
 		if err != nil {
 			return fail(err)
