@@ -210,7 +210,15 @@ var cpioVariants = []string{"newc", "odc"}
 // is the difference that puts every later header out by one to three bytes if it
 // is got wrong -- and reads as a corrupt archive somewhere else entirely.
 func TestACpioReadsThroughTheSystemsOwnCpio(t *testing.T) {
-	bin, err := exec.LookPath("cpio")
+	// ⛔ libarchive's, when there is a choice. GNU cpio has no `pwb`
+	// format — `cpio -H pwb` exits 2 — and the runners carry GNU cpio,
+	// so the plain name finds the one implementation that cannot build
+	// half of this fixture. Measured on a runner in
+	// go-filesystems/cpio#9. On macOS the plain name IS bsdcpio.
+	bin, err := exec.LookPath("bsdcpio")
+	if err != nil {
+		bin, err = exec.LookPath("cpio")
+	}
 	if err != nil {
 		t.Skip("no cpio here to build the fixture with")
 	}
