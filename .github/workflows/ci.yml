@@ -66,7 +66,12 @@ jobs:
       - name: install the foreign judges
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libarchive-tools xorriso 7zip
+          # ⛔ 7zip-standalone, not 7zip: on noble /usr/bin/7zz comes from the
+          # standalone package. `7zip` installs without error and provides no
+          # 7zz, and the image's own p7zip-full is transitional — it gives 7z
+          # and 7za. The first push named `7zip`, the judge skipped with "no
+          # 7zz here", and the guard below is what said so.
+          sudo apt-get install -y -qq libarchive-tools xorriso 7zip-standalone
 
       - name: Test (race + coverage)
         run: go test -race -covermode=atomic -coverprofile=cover.out -timeout 5m ./...
