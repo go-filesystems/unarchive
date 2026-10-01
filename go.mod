@@ -8,7 +8,7 @@ require (
 	github.com/go-compressions/compress v0.1.1
 	github.com/go-compressions/lzip v0.1.0
 	github.com/go-compressions/lzo v0.1.0
-	github.com/go-diskimages/dmg v0.4.0
+	github.com/go-diskimages/dmg v0.4.1
 	github.com/go-filesystems/cab v0.1.0
 	github.com/go-filesystems/cpio v0.5.0
 	github.com/go-filesystems/detect v0.1.0
@@ -33,7 +33,7 @@ require (
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/go-compressions/adc v0.1.0 // indirect
-	github.com/go-compressions/lzfse v0.3.0 // indirect
+	github.com/go-compressions/lzfse v0.4.1 // indirect
 	github.com/go-volumes/safeio v0.0.0-20260831125406-d8f54b2890d4 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/nwaples/rardecode/v2 v2.4.1 // indirect
