@@ -23,7 +23,7 @@ require (
 	github.com/go-filesystems/warc v0.1.0
 	github.com/go-filesystems/xar v0.1.1
 	github.com/klauspost/compress v1.20.1
-	github.com/pierrec/lz4/v4 v4.1.31
+	github.com/pierrec/lz4/v4 v4.1.33
 	github.com/ulikunitz/xz v0.5.17
 )
 
