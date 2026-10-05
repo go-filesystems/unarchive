@@ -4,24 +4,24 @@ go 1.27.1
 
 require (
 	github.com/bodgit/sevenzip v1.6.5
-	github.com/go-compressions/bzip2 v0.1.0
-	github.com/go-compressions/compress v0.1.1
-	github.com/go-compressions/lzip v0.1.0
-	github.com/go-compressions/lzo v0.1.0
-	github.com/go-diskimages/dmg v0.4.1
-	github.com/go-filesystems/cab v0.1.0
-	github.com/go-filesystems/cpio v0.5.0
-	github.com/go-filesystems/detect v0.1.0
-	github.com/go-filesystems/hfsplus v0.3.0
-	github.com/go-filesystems/interface v0.3.0
-	github.com/go-filesystems/iso9660 v0.3.0
-	github.com/go-filesystems/overlay v0.2.0
-	github.com/go-filesystems/rar v0.1.0
-	github.com/go-filesystems/rpm v0.2.0
-	github.com/go-filesystems/sevenzip v0.2.0
-	github.com/go-filesystems/squashfs v0.3.0
-	github.com/go-filesystems/warc v0.1.0
-	github.com/go-filesystems/xar v0.1.1
+	github.com/go-compressions/bzip2 v0.2.0
+	github.com/go-compressions/compress v0.2.0
+	github.com/go-compressions/lzip v0.2.0
+	github.com/go-compressions/lzo v0.2.0
+	github.com/go-diskimages/dmg v0.5.0
+	github.com/go-filesystems/cab v0.2.0
+	github.com/go-filesystems/cpio v0.6.0
+	github.com/go-filesystems/detect v0.3.0
+	github.com/go-filesystems/hfsplus v0.4.0
+	github.com/go-filesystems/interface v0.4.0
+	github.com/go-filesystems/iso9660 v0.4.0
+	github.com/go-filesystems/overlay v0.3.0
+	github.com/go-filesystems/rar v0.2.0
+	github.com/go-filesystems/rpm v0.3.0
+	github.com/go-filesystems/sevenzip v0.3.0
+	github.com/go-filesystems/squashfs v0.4.0
+	github.com/go-filesystems/warc v0.2.0
+	github.com/go-filesystems/xar v0.2.0
 	github.com/klauspost/compress v1.20.1
 	github.com/pierrec/lz4/v4 v4.1.33
 	github.com/ulikunitz/xz v0.5.17
