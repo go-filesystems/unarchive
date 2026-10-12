@@ -22,7 +22,7 @@ require (
 	github.com/go-filesystems/squashfs v0.4.0
 	github.com/go-filesystems/warc v0.2.0
 	github.com/go-filesystems/xar v0.2.0
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.3
 	github.com/pierrec/lz4/v4 v4.1.33
 	github.com/ulikunitz/xz v0.5.17
 )
