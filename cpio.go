@@ -29,7 +29,7 @@ import (
 // a file it keeps open. Sharing the filesystem would have meant one of them taking
 // the other's shape.
 func openCpio(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesystem, error) {
-	recs, err := cpio.Records(ra, size)
+	recs, err := cpio.RecordsLimit(ra, size, DefaultLimits.resolved().MaxEntries)
 	if err != nil {
 		// The package's own sentinels are what callers here match on, so the
 		// parser's are translated rather than leaked. A caller asking "is this a
@@ -37,6 +37,8 @@ func openCpio(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesyst
 		switch {
 		case errors.Is(err, cpio.ErrNotCpio):
 			return nil, fmt.Errorf("%w", ErrUnknownFormat)
+		case errors.Is(err, cpio.ErrTooLarge):
+			return nil, fmt.Errorf("%s: %w", err, ErrTooLarge)
 		case errors.Is(err, cpio.ErrTruncated):
 			return nil, fmt.Errorf("%s: %w", err, ErrIncomplete)
 		}

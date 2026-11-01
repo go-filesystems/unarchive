@@ -345,6 +345,8 @@ per megabyte, never per byte).
 | what a `.gz`, `.xz`, `.zst` ... wrapper may spool to disk | `DefaultLimits.MaxSpool` | 64 GiB | `ErrTooLarge`; the spool is removed |
 | an LZMA2 / LZMA dictionary (`.xz` wrappers and zip methods 14 and 95) | `DefaultLimits.MaxDictionary` | 256 MiB | `ErrTooLarge` (wrapping the decoder's), before the window is allocated; the window grows with the data decoded, so a header that merely *declares* more is not refused, only data that fills more |
 | a zstd window | `DefaultLimits.MaxDictionary` | 256 MiB | the decoder's own error, before the memory is reserved |
+| a `.lz` (lzip) member's coded dictionary | `DefaultLimits.MaxDictionary` | 256 MiB (lzip itself allows 512 MiB at most) | `ErrTooLarge`, before the LZMA layer starts; the window then grows with the data decoded |
+| records of a cpio archive | `DefaultLimits.MaxEntries` | 1,048,576 | `ErrTooLarge`, before the list of records is built |
 
 For `Options`, zero is the default and a negative value removes the limit.
 `DefaultLimits` is process-wide: set it once at start-up, before opening anything.

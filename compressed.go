@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,10 +72,17 @@ func decompressor(f Format, r io.Reader) (io.Reader, func() error, error) {
 		// thing holding anything, and openCompressed closes that.
 		newReader := lzo.NewReader
 		if f == FormatLzip {
-			newReader = lzip.NewReader
+			// The dictionary a member codes is held to Limits.MaxDictionary
+			// (lzip's own ceiling, checked before anything is allocated; its
+			// window then grows with the decoded data).
+			maxDict := int(min(DefaultLimits.resolved().MaxDictionary, math.MaxInt))
+			newReader = func(r io.Reader) (io.Reader, error) { return lzip.NewReaderLimit(r, maxDict) }
 		}
 		z, err := newReader(r)
 		if err != nil {
+			if errors.Is(err, lzip.ErrTooLarge) {
+				return nil, nil, fmt.Errorf("%s: %w", err, ErrTooLarge)
+			}
 			return nil, nil, err
 		}
 		return z, nothing, nil

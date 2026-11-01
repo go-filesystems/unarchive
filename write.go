@@ -53,7 +53,7 @@ func Writable(path string) (*overlay.Overlay, Format, error) {
 	if err != nil {
 		return nil, format, err
 	}
-	o, err := overlay.New(base)
+	o, err := overlay.New(base, overlay.WithLimits(overlay.Limits{MaxEntries: DefaultLimits.resolved().MaxEntries}))
 	if err != nil {
 		base.Close()
 		return nil, format, err
