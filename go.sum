@@ -23,6 +23,8 @@ github.com/go-compressions/lzip v0.2.0 h1:219BsV2Stv4+WIpgHGgSc6os7OGThlzVFRFrHg
 github.com/go-compressions/lzip v0.2.0/go.mod h1:ahvHmv8ufTdDwFO46xxmK4PR4aKZ6Vy1K3KkqaaPfA0=
 github.com/go-compressions/lzo v0.2.0 h1:abBOA9insXS3GiCqP1d4wowtWThfM6TpV1hUbs5Sh+0=
 github.com/go-compressions/lzo v0.2.0/go.mod h1:dJtx0L0j59FkTKSVa5mu6JEXAeOKi9t9Z89SccSM2A4=
+github.com/go-compressions/xz v0.1.0 h1:uBcHmr/IXwk5mNnuOIz4E2rU3aNl9mVOwIQjMgPy0g8=
+github.com/go-compressions/xz v0.1.0/go.mod h1:ZbYM2CbKR8SZzq6rqhqlWFnBaXrNhWwQyTSslnYQ0FU=
 github.com/go-diskimages/dmg v0.5.0 h1:yRS7D0H6zqRWDQQYFTvNN26Oxt+GZqZo8xDikYTBmmI=
 github.com/go-diskimages/dmg v0.5.0/go.mod h1:fnEmvUsMazEvxuHqF9hzLtTrvJ6BIQLgNrhNL1GRFNw=
 github.com/go-filesystems/cab v0.2.0 h1:qUJ/XvnPoyqgyCA7C3wozxoM1ZFxXw7yMBaKuQYVKbk=

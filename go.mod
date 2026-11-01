@@ -8,6 +8,7 @@ require (
 	github.com/go-compressions/compress v0.2.0
 	github.com/go-compressions/lzip v0.2.0
 	github.com/go-compressions/lzo v0.2.0
+	github.com/go-compressions/xz v0.1.0
 	github.com/go-diskimages/dmg v0.5.0
 	github.com/go-filesystems/cab v0.2.0
 	github.com/go-filesystems/cpio v0.6.0

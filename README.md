@@ -343,7 +343,8 @@ per megabyte, never per byte).
 | all paths of one index | fixed | 256 MiB | `ErrTooLarge` |
 | what `ReadFile` returns | `DefaultLimits.MaxReadFile` | 1 GiB | `ErrTooLarge`, before reserving; `Extract` and `OpenFile` stream |
 | what a `.gz`, `.xz`, `.zst` ... wrapper may spool to disk | `DefaultLimits.MaxSpool` | 64 GiB | `ErrTooLarge`; the spool is removed |
-| a zip entry's LZMA dictionary, a zstd window | `DefaultLimits.MaxDictionary` | 256 MiB | the decoder's own error, before the memory is reserved |
+| an LZMA2 / LZMA dictionary (`.xz` wrappers and zip methods 14 and 95) | `DefaultLimits.MaxDictionary` | 256 MiB | `ErrTooLarge` (wrapping the decoder's), before the window is allocated; the window grows with the data decoded, so a header that merely *declares* more is not refused, only data that fills more |
+| a zstd window | `DefaultLimits.MaxDictionary` | 256 MiB | the decoder's own error, before the memory is reserved |
 
 For `Options`, zero is the default and a negative value removes the limit.
 `DefaultLimits` is process-wide: set it once at start-up, before opening anything.
@@ -351,7 +352,13 @@ For `Options`, zero is the default and a negative value removes the limit.
 
 Measured before, each with a hand-built archive: a 218-byte zip declaring 4 GiB
 made `ReadFile` allocate 4,294,975,728 bytes (`io/fs.ReadFile` reserves what
-`Stat` reports); a 9-byte LZMA header in a zip entry reserved a 1 GiB dictionary;
+`Stat` reports); a 9-byte LZMA header in a zip entry reserved a 1 GiB dictionary
+(`ulikunitz/xz`'s `DictCap` bounded the `.lzma` header, but not the xz path, which
+allocated whatever dictionary a Block Header declared: a 44-byte `.xz` declaring
+1.5 GiB allocated 1,610,663,976 bytes; `.tar.xz` and zip method 95 took no limit at
+all). The xz, LZMA and zip LZMA decoders are `go-compressions/xz` now, and the same
+planted bombs (1.5 GiB and 4 GiB - 1 declared over a few bytes) allocate about
+36 KB and 68 KB; `ulikunitz/xz` remains for the writers only;
 a 1.4 MB ar archive with 20,000 long-named members allocated 2.5 GB (the string
 table was copied once per member); a 400 KB ar holding one member with a 400,001
 byte BSD name ran past 4 min 40 s synthesising 200,000 parent directories; 1000

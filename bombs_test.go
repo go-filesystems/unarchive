@@ -8,7 +8,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -355,38 +354,8 @@ func TestFromFSReadFileStatFailure(t *testing.T) {
 	}
 }
 
-// Before: nine bytes (an LZMA preamble naming a 1 GiB dictionary) made a zip
-// entry allocate 1,073,769,696 bytes. xz's lzma.NewReader treats DictCap as a
-// limit on the header and defaults it to 2 GiB.
-func TestBombZipLZMADictionary(t *testing.T) {
-	head := func(dict uint32) []byte {
-		var in bytes.Buffer
-		in.Write([]byte{0, 0, 5, 0}) // versions, 5 property bytes
-		in.WriteByte(0x5d)
-		binary.Write(&in, binary.LittleEndian, dict)
-		return in.Bytes()
-	}
-	withLimits(t, Limits{MaxDictionary: 1 << 20})
-	var err error
-	n := allocated(func() { _, err = newZipLZMA(bytes.NewReader(head(1 << 30))) })
-	over := func(err error) bool {
-		return err != nil && strings.Contains(err.Error(), "exceeds configured dictionary")
-	}
-	if !over(err) {
-		t.Fatalf("a 1 GiB dictionary must be refused as too large: %v", err)
-	}
-	if n >= oneMiB {
-		t.Errorf("allocated %d bytes", n)
-	}
-	if _, err := newZipLZMA(bytes.NewReader(head(1<<20 + 1))); !over(err) {
-		t.Errorf("one byte over the limit must be refused: %v", err)
-	}
-	// Exactly the limit gets past the dictionary check and then meets the end of a
-	// stream that holds only a header: EOF, not a refusal.
-	if _, err := newZipLZMA(bytes.NewReader(head(1 << 20))); over(err) {
-		t.Errorf("exactly the limit must not be refused: %v", err)
-	}
-}
+// (TestBombZipLZMADictionary, the zip LZMA dictionary, is in xzbombs_test.go with the
+// xz ones: both decoders are go-compressions/xz now.)
 
 // A zstd frame whose window is over the limit is refused instead of reserved.
 func TestZstdWindowIsLimited(t *testing.T) {
