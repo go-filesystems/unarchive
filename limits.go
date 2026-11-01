@@ -35,8 +35,10 @@ type Limits struct {
 	// to the temporary file it is spooled to.
 	MaxSpool int64
 
-	// MaxDictionary bounds the dictionary or window a decoder is told to reserve:
-	// the LZMA dictionary of a zip entry, a zstd window.
+	// MaxDictionary bounds the dictionary or window a decoder may reserve: the
+	// LZMA2 or LZMA dictionary of an .xz stream or a zip entry (the window grows
+	// with the data decoded and ErrTooLarge is returned before it would pass this),
+	// a zstd window (refused from the frame header).
 	MaxDictionary int64
 }
 

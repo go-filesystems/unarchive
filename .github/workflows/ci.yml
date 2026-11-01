@@ -101,6 +101,25 @@ jobs:
           awk -v c="$total" -v m="$COVERAGE_MIN" 'BEGIN { exit (c+0 >= m+0) ? 0 : 1 }' \
             || { echo "coverage ${total}% below floor ${COVERAGE_MIN}%"; exit 1; }
 
+  # Bomb tests assert a refusal or a tiny allocation. They run as a compiled
+  # binary under GOMEMLIMIT and a virtual memory limit, so that a regression
+  # fails by itself instead of allocating gigabytes of the runner.
+  bombs:
+    name: bombs (ulimit -v, GOMEMLIMIT)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.3'
+          check-latest: true
+          cache: true
+      - run: go test -c -o unarchive.test .
+      - name: run under limits
+        run: |
+          ulimit -v 2097152
+          GOMEMLIMIT=256MiB ./unarchive.test -test.run 'Bomb' -test.v
+
   # Every 64-bit target the fleet ships for, CGO-free. A driver that reads a
   # byte order wrong shows up here and nowhere else: s390x is big-endian.
   cross:

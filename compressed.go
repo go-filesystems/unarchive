@@ -19,7 +19,6 @@ import (
 	filesystem "github.com/go-filesystems/interface"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
-	"github.com/ulikunitz/xz"
 )
 
 // maxNesting is how many stream wrappers Open will peel.
@@ -52,7 +51,7 @@ func decompressor(f Format, r io.Reader) (io.Reader, func() error, error) {
 		// which is all that is wanted here.
 		return bzip2.NewReader(r), nothing, nil
 	case FormatXZ:
-		z, err := xz.NewReader(r)
+		z, err := newXZReader(r)
 		if err != nil {
 			return nil, nil, err
 		}

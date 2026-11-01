@@ -12,9 +12,9 @@ import (
 	"io"
 	"math"
 
+	"github.com/go-compressions/xz"
+	"github.com/go-compressions/xz/lzma"
 	"github.com/klauspost/compress/zstd"
-	"github.com/ulikunitz/xz"
-	"github.com/ulikunitz/xz/lzma"
 )
 
 // The zip compression methods this package handles beyond the two archive/zip has
@@ -54,7 +54,7 @@ func registerZipMethods(register func(uint16, zip.Decompressor)) {
 		return io.NopCloser(bzip2.NewReader(r))
 	})
 	register(zipMethodXZ, func(r io.Reader) io.ReadCloser {
-		return errReadCloser(func() (io.Reader, error) { return xz.NewReader(r) })
+		return errReadCloser(func() (io.Reader, error) { return newXZReader(r) })
 	})
 	register(zipMethodZstd, func(r io.Reader) io.ReadCloser {
 		return errReadCloser(func() (io.Reader, error) {
@@ -149,10 +149,49 @@ func newZipLZMA(r io.Reader) (io.Reader, error) {
 	for i := range size {
 		size[i] = 0xFF // unknown: stop at the end marker
 	}
-	// DictCap is a LIMIT on the dictionary the header names (xz lzma/reader.go:133)
-	// and the default is 2 GiB: a nine-byte header asked for 1 GiB and got it.
-	return lzma.ReaderConfig{DictCap: int(min(DefaultLimits.resolved().MaxDictionary, math.MaxInt32))}.NewReader(
+	// The header's dictionary size is a claim: go-compressions/xz grows the window
+	// with the data decoded and refuses one that would pass MaxDictionary, before
+	// allocating it (ulikunitz/xz allocated the whole header size, up to 4 GiB).
+	z, err := lzma.ReaderConfig{MaxDictionary: maxDictionary()}.NewReader(
 		io.MultiReader(newByteReader(props), newByteReader(size[:]), r))
+	if err != nil {
+		return nil, dictError(err)
+	}
+	return &dictReader{r: z}, nil
+}
+
+// maxDictionary is Limits.MaxDictionary as the int the decoders take.
+func maxDictionary() int {
+	return int(min(DefaultLimits.resolved().MaxDictionary, math.MaxInt32))
+}
+
+// newXZReader decodes an .xz stream, one or several concatenated, whose LZMA2
+// window may not pass Limits.MaxDictionary in any block.
+func newXZReader(r io.Reader) (io.Reader, error) {
+	z, err := xz.ReaderConfig{MaxDictionary: maxDictionary()}.NewReader(r)
+	if err != nil {
+		return nil, dictError(err)
+	}
+	return &dictReader{r: z}, nil
+}
+
+// dictError reports a decoder's refusal of a window over the ceiling as this
+// package's ErrTooLarge, wrapping the library's error.
+func dictError(err error) error {
+	if errors.Is(err, xz.ErrTooLarge) {
+		return fmt.Errorf("the decoder wants a dictionary over %d bytes, Limits.MaxDictionary: %w: %w",
+			DefaultLimits.resolved().MaxDictionary, ErrTooLarge, err)
+	}
+	return err
+}
+
+// dictReader maps the decoder's ErrTooLarge, raised on the Read that would grow
+// the window past the ceiling, to ErrTooLarge.
+type dictReader struct{ r io.Reader }
+
+func (d *dictReader) Read(p []byte) (int, error) {
+	n, err := d.r.Read(p)
+	return n, dictError(err)
 }
 
 // newByteReader is bytes.NewReader without the import, kept next to its only use.
