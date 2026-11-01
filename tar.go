@@ -6,6 +6,7 @@ package unarchive
 import (
 	"archive/tar"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -30,7 +31,8 @@ import (
 // a large size carried in a pax record is already resolved by the time it is
 // seen here.
 func openTar(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesystem, error) {
-	fs := &tarFS{ra: ra, closer: closer, byPath: map[string]*tarEntry{}, kids: map[string][]string{}}
+	fs := &tarFS{ra: ra, closer: closer, byPath: map[string]*tarEntry{}, kids: map[string][]string{},
+		budget: newIndexBudget(), maxRead: DefaultLimits.resolved().MaxReadFile}
 	counter := &countingReader{r: io.NewSectionReader(ra, 0, size)}
 	tr := tar.NewReader(counter)
 	for {
@@ -41,7 +43,9 @@ func openTar(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesyste
 		if err != nil {
 			return nil, err
 		}
-		fs.add(h, counter.n)
+		if err := fs.add(h, counter.n); err != nil {
+			return nil, err
+		}
 	}
 	// Refused HERE rather than at extraction, because extraction cannot see it:
 	// see refuseNestingUnderANonDirectory.
@@ -82,15 +86,32 @@ type tarFS struct {
 	closer io.Closer
 	byPath map[string]*tarEntry
 	kids   map[string][]string
+
+	budget  *indexBudget
+	maxRead int64 // ReadFile's ceiling
 }
 
 // add records one header and every directory above it that the tar did not
 // name. A tar is a list of paths, not a tree, and whether a parent appears is
 // up to whatever wrote it.
-func (f *tarFS) add(h *tar.Header, offset int64) {
+//
+// Every key is charged to the budget first, and a path is linked to its parents
+// once, when it first appears, stopping at the first ancestor already known:
+// before that, each insert searched its directory's child list linearly and
+// walked to the root, so n files in one directory were quadratic.
+func (f *tarFS) add(h *tar.Header, offset int64) error {
 	p := tarClean(h.Name)
 	if p == "" || p == "." {
-		return
+		return nil
+	}
+	if h.Size < 0 {
+		return fmt.Errorf("%q declares a size of %d: %w", p, h.Size, ErrIncomplete)
+	}
+	_, existed := f.byPath[p]
+	if !existed {
+		if err := f.budget.charge(p); err != nil {
+			return err
+		}
 	}
 	isDir := h.Typeflag == tar.TypeDir || strings.HasSuffix(h.Name, "/")
 	f.byPath[p] = &tarEntry{
@@ -102,27 +123,26 @@ func (f *tarFS) add(h *tar.Header, offset int64) {
 		mode:       posixMode(h.FileInfo().Mode()),
 		linkTarget: h.Linkname,
 	}
-	for parent := path.Dir(p); ; parent = path.Dir(parent) {
-		if _, seen := f.byPath[parent]; !seen && parent != "." {
-			f.byPath[parent] = &tarEntry{
-				path: parent, name: path.Base(parent), dir: true, mode: 0o040755,
-			}
-		}
-		f.kids[parent] = appendUnique(f.kids[parent], p)
+	if existed {
+		return nil // already linked, by an earlier header or as an implied directory
+	}
+	for child := p; ; {
+		parent := path.Dir(child)
+		f.kids[parent] = append(f.kids[parent], child)
 		if parent == "." {
-			break
+			return nil
 		}
-		p = parent
-	}
-}
-
-func appendUnique(list []string, s string) []string {
-	for _, e := range list {
-		if e == s {
-			return list
+		if _, seen := f.byPath[parent]; seen {
+			return nil // and so are all its ancestors
 		}
+		if err := f.budget.charge(parent); err != nil {
+			return err
+		}
+		f.byPath[parent] = &tarEntry{
+			path: parent, name: path.Base(parent), dir: true, mode: 0o040755,
+		}
+		child = parent
 	}
-	return append(list, s)
 }
 
 // tarClean normalises a tar's own spelling of a path.
@@ -210,12 +230,10 @@ func (f *tarFS) ReadFile(p string) ([]byte, error) {
 		return nil, err
 	}
 	defer h.Close()
-	buf := make([]byte, h.Size())
-	n, err := h.ReadAt(buf, 0)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, err
-	}
-	return buf[:n], nil
+	// Bounded by Limits.MaxReadFile before anything is reserved, and grown from
+	// what is read: a sparse GNU tar entry declares its EXPANDED size, which is
+	// not a number of bytes in the file at all.
+	return readBounded(io.NewSectionReader(h, 0, h.Size()), h.Size(), f.maxRead, p)
 }
 
 // OpenFile hands back a section of the archive. Nothing is decompressed and

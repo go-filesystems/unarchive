@@ -49,6 +49,43 @@ type Options struct {
 
 	// Progress, when set, is told each entry as it completes.
 	Progress func(name string, bytes int64)
+
+	// MaxBytes bounds the bytes written in all. Zero means DefaultMaxBytes;
+	// negative removes the limit. A compressed archive of a few kilobytes can
+	// hold terabytes (42.zip), and an extractor that trusts it fills the disk.
+	MaxBytes int64
+
+	// MaxEntries bounds the files, directories and links created. Zero means
+	// DefaultMaxEntries; negative removes the limit.
+	MaxEntries int
+
+	// MaxDepth bounds how deep the tree goes. Zero means DefaultMaxDepth;
+	// negative removes the limit. The walk recurses once per level, and a Go
+	// stack that runs out is a fatal error, not a panic that can be recovered.
+	MaxDepth int
+}
+
+// Defaults for Options.
+const (
+	// DefaultMaxBytes is 64 GiB.
+	DefaultMaxBytes = 64 << 30
+	// DefaultMaxEntries is 4,194,304.
+	DefaultMaxEntries = 1 << 22
+	// DefaultMaxDepth is 1024 levels, a quarter of Linux's PATH_MAX at the
+	// shortest name an entry can have.
+	DefaultMaxDepth = 1024
+)
+
+// limit resolves a field whose zero value means a default and whose negative
+// value means none: it returns -1 for "no limit".
+func limit(v, def int64) int64 {
+	switch {
+	case v == 0:
+		return def
+	case v < 0:
+		return -1
+	}
+	return v
 }
 
 // Result is what an extraction did.
@@ -78,7 +115,7 @@ func Extract(fsys filesystem.Filesystem, dest string, opt Options) (*Result, err
 		return nil, err
 	}
 	res := &Result{}
-	if err := walk(fsys, opener, "", absDest, opt, res); err != nil {
+	if err := walk(fsys, opener, "", absDest, opt, res, 0); err != nil {
 		return res, err
 	}
 	return res, nil
@@ -98,12 +135,19 @@ func filePerm(opt Options) os.FileMode {
 	return 0o644
 }
 
-func walk(fsys filesystem.Filesystem, opener filesystem.Opener, dir, absDest string, opt Options, res *Result) error {
+func walk(fsys filesystem.Filesystem, opener filesystem.Opener, dir, absDest string, opt Options, res *Result, depth int) error {
+	if max := limit(int64(opt.MaxDepth), DefaultMaxDepth); max >= 0 && int64(depth) > max {
+		return fmt.Errorf("%s is %d levels deep, the limit is %d: %w", displayDir(dir), depth, max, ErrTooLarge)
+	}
 	entries, err := fsys.ListDir(dir)
 	if err != nil {
 		return fmt.Errorf("%s: %w", displayDir(dir), err)
 	}
+	maxEntries := limit(int64(opt.MaxEntries), DefaultMaxEntries)
 	for _, e := range entries {
+		if maxEntries >= 0 && int64(res.Dirs+res.Files+res.Links) >= maxEntries {
+			return fmt.Errorf("more than %d entries: %w", maxEntries, ErrTooLarge)
+		}
 		// Refused HERE, on the component, before anything joins it. A name of
 		// ".." is not a name, it is a traversal -- and path.Join normalises it
 		// away, so a check made after joining is never asked the dangerous
@@ -133,7 +177,7 @@ func walk(fsys filesystem.Filesystem, opener filesystem.Opener, dir, absDest str
 				return err
 			}
 			res.Dirs++
-			if err := walk(fsys, opener, inner, absDest, opt, res); err != nil {
+			if err := walk(fsys, opener, inner, absDest, opt, res, depth+1); err != nil {
 				return err
 			}
 			continue
@@ -152,7 +196,11 @@ func walk(fsys filesystem.Filesystem, opener filesystem.Opener, dir, absDest str
 			}
 			continue
 		}
-		n, err := extractFile(fsys, opener, inner, target, opt)
+		remaining := int64(-1)
+		if max := limit(opt.MaxBytes, DefaultMaxBytes); max >= 0 {
+			remaining = max - res.Bytes
+		}
+		n, err := extractFile(fsys, opener, inner, target, opt, remaining)
 		if err != nil {
 			return fmt.Errorf("%s: %w", inner, err)
 		}
@@ -288,12 +336,22 @@ func refuseLinkAt(target, inner string) error {
 }
 
 // extractFile writes one entry and checks it against its declared size.
-func extractFile(fsys filesystem.Filesystem, opener filesystem.Opener, inner, target string, opt Options) (int64, error) {
+//
+// remaining is how many more bytes the extraction may write; negative means no
+// limit. An entry that declares more is refused before a file is created, and one
+// that turns out to hold more stops at the limit.
+func extractFile(fsys filesystem.Filesystem, opener filesystem.Opener, inner, target string, opt Options, remaining int64) (int64, error) {
 	st, err := fsys.Stat(inner)
 	if err != nil {
 		return 0, err
 	}
 	declared := int64(st.Size())
+	if declared < 0 { // a size past 2^63 in a uint64
+		return 0, fmt.Errorf("declares a size of %d bytes: %w", st.Size(), ErrIncomplete)
+	}
+	if remaining >= 0 && declared > remaining {
+		return 0, fmt.Errorf("declares %d bytes with %d left under MaxBytes: %w", declared, remaining, ErrTooLarge)
+	}
 
 	h, err := opener.OpenFile(inner)
 	if err != nil {
@@ -324,7 +382,7 @@ func extractFile(fsys filesystem.Filesystem, opener filesystem.Opener, inner, ta
 		return 0, err
 	}
 
-	written, copyErr := copyEntry(out, h)
+	written, copyErr := copyEntry(out, h, remaining)
 	closeErr := out.Close()
 	if copyErr != nil {
 		return written, copyErr
@@ -343,12 +401,25 @@ func extractFile(fsys filesystem.Filesystem, opener filesystem.Opener, inner, ta
 
 // copyEntry streams the whole entry through its ReaderAt. Forwards only, which
 // is the direction an archive is cheap in.
-func copyEntry(w io.Writer, h filesystem.File) (int64, error) {
+//
+// limit is how many bytes may be written; negative means no limit. It is checked
+// once per chunk, not per byte.
+func copyEntry(w io.Writer, h filesystem.File, limit int64) (int64, error) {
 	const chunk = 1 << 20
 	buf := make([]byte, chunk)
 	var off int64
 	for {
 		n, err := h.ReadAt(buf, off)
+		if limit >= 0 && off+int64(n) > limit {
+			n = int(limit - off) // write up to the limit, then stop
+			if n > 0 {
+				if _, werr := w.Write(buf[:n]); werr != nil {
+					return off, werr
+				}
+				off += int64(n)
+			}
+			return off, fmt.Errorf("entry yields more than the %d bytes MaxBytes leaves: %w", limit, ErrTooLarge)
+		}
 		if n > 0 {
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				return off, werr

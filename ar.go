@@ -4,6 +4,7 @@
 package unarchive
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	iofs "io/fs"
@@ -60,7 +61,10 @@ func openAr(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesystem
 		if err != nil {
 			return nil, fmt.Errorf("ar: member size at %d: %w", off, err)
 		}
-		if msize < 0 || off+arHeaderLen+msize > size {
+		// Compared by subtraction, so that no sum can wrap. (The size field is ten
+		// decimal digits, 9,999,999,999 at most, so it cannot wrap on a 64-bit
+		// int64 either way; this is not a defect fixed, only one made impossible.)
+		if msize < 0 || msize > size-off-arHeaderLen {
 			return nil, fmt.Errorf("ar: member at %d says %d bytes, past the end: %w",
 				off, msize, ErrIncomplete)
 		}
@@ -107,7 +111,9 @@ func openAr(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesystem
 				return nil, fmt.Errorf("ar: long name %q has no entry in the string table: %w",
 					name, ErrUnknownFormat)
 			}
-			end := strings.IndexAny(string(names[idx:]), "/\n")
+			// bytes, not string(names[idx:]): that copied the rest of the table for
+			// every long-named member, which is quadratic in the table.
+			end := bytes.IndexAny(names[idx:], "/\n")
 			if end < 0 {
 				end = len(names) - idx
 			}

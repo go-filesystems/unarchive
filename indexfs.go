@@ -4,6 +4,7 @@
 package unarchive
 
 import (
+	"fmt"
 	"io"
 	iofs "io/fs"
 	"path"
@@ -40,23 +41,40 @@ type record struct {
 // put usr and usr/bin somewhere, or a walk of the root finds nothing.
 func newIndexFS(ra io.ReaderAt, recs []record) (iofs.FS, error) {
 	f := &indexFS{ra: ra, byName: map[string]*record{}, kids: map[string][]string{}}
+	budget := newIndexBudget()
 	for i := range recs {
 		r := recs[i]
 		r.name = indexClean(r.name)
 		if r.name == "" || r.name == "." {
 			continue
 		}
+		if r.size < 0 {
+			return nil, fmt.Errorf("%q declares a size of %d: %w", r.name, r.size, ErrIncomplete)
+		}
+		// A name seen twice is one path: the later record wins and it is linked
+		// under its parent once. The link used to search the parent's child list
+		// for it, which made n entries in one directory quadratic.
+		if _, dup := f.byName[r.name]; !dup {
+			if err := budget.charge(r.name); err != nil {
+				return nil, err
+			}
+			f.link(r.name)
+		}
 		f.byName[r.name] = &r
-		f.link(r.name)
 	}
 	// Synthesise the parents nothing declared, after the real records, so a
-	// declared directory keeps its own mode.
+	// declared directory keeps its own mode. The walk up stops at the first
+	// ancestor that exists: it was, or will be, walked from by its own entry.
 	for name := range f.byName {
 		for dir := path.Dir(name); dir != "."; dir = path.Dir(dir) {
-			if _, ok := f.byName[dir]; !ok {
-				f.byName[dir] = &record{name: dir, mode: iofs.ModeDir | 0o755}
-				f.link(dir)
+			if _, ok := f.byName[dir]; ok {
+				break
 			}
+			if err := budget.charge(dir); err != nil {
+				return nil, err
+			}
+			f.byName[dir] = &record{name: dir, mode: iofs.ModeDir | 0o755}
+			f.link(dir)
 		}
 	}
 	// Refused HERE rather than at extraction, because extraction cannot see it:
@@ -91,9 +109,7 @@ func (f *indexFS) link(name string) {
 	if dir == name {
 		return
 	}
-	if !slices.Contains(f.kids[dir], name) {
-		f.kids[dir] = append(f.kids[dir], name)
-	}
+	f.kids[dir] = append(f.kids[dir], name)
 }
 
 func (f *indexFS) Open(name string) (iofs.File, error) {

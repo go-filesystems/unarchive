@@ -327,6 +327,42 @@ Nesting is capped: a wrapper holds one stream and that stream may be another
 wrapper, so a few hundred bytes of `.gz` nested on itself would otherwise ask
 for however much spool the machine has.
 
+## Untrusted input
+
+An archive is somebody else's bytes, and every size in it is a claim. These limits
+apply by default; none of them is on the hot path (they are checked per header or
+per megabyte, never per byte).
+
+| what the archive asks for | limit | default | on excess |
+|---|---|---|---|
+| bytes `Extract` writes | `Options.MaxBytes` | 64 GiB | `ErrTooLarge`; an entry declaring more than is left is refused before its file is created |
+| entries `Extract` creates | `Options.MaxEntries` | 4,194,304 | `ErrTooLarge` |
+| depth `Extract` recurses to | `Options.MaxDepth` | 1024 | `ErrTooLarge` (a Go stack that runs out is fatal, not recoverable) |
+| paths an index holds (tar, ar, cpio) | `DefaultLimits.MaxEntries` | 1,048,576, directories included | `ErrTooLarge` |
+| one path | fixed | 4096 bytes | `ErrTooLarge` |
+| all paths of one index | fixed | 256 MiB | `ErrTooLarge` |
+| what `ReadFile` returns | `DefaultLimits.MaxReadFile` | 1 GiB | `ErrTooLarge`, before reserving; `Extract` and `OpenFile` stream |
+| what a `.gz`, `.xz`, `.zst` ... wrapper may spool to disk | `DefaultLimits.MaxSpool` | 64 GiB | `ErrTooLarge`; the spool is removed |
+| a zip entry's LZMA dictionary, a zstd window | `DefaultLimits.MaxDictionary` | 256 MiB | the decoder's own error, before the memory is reserved |
+
+For `Options`, zero is the default and a negative value removes the limit.
+`DefaultLimits` is process-wide: set it once at start-up, before opening anything.
+`Open` has no per-call limits yet.
+
+Measured before, each with a hand-built archive: a 218-byte zip declaring 4 GiB
+made `ReadFile` allocate 4,294,975,728 bytes (`io/fs.ReadFile` reserves what
+`Stat` reports); a 9-byte LZMA header in a zip entry reserved a 1 GiB dictionary;
+a 1.4 MB ar archive with 20,000 long-named members allocated 2.5 GB (the string
+table was copied once per member); a 400 KB ar holding one member with a 400,001
+byte BSD name ran past 4 min 40 s synthesising 200,000 parent directories; 1000
+tar entries 1000 directories deep (3 MB) allocated 435 MB. Indexing is linear now:
+a path is linked to its parents once, and the walk up stops at the first ancestor
+already known.
+
+Not covered here: the cpio, rpm, xar, rar, cab, iso9660, squashfs, hfsplus and dmg
+parsers live in their own modules and are audited there; this module raises its
+`rar` and `xar` requirements to the audited releases.
+
 ## Licence
 
 BSD-3-Clause.

@@ -16,12 +16,12 @@ require (
 	github.com/go-filesystems/interface v0.5.0
 	github.com/go-filesystems/iso9660 v0.4.0
 	github.com/go-filesystems/overlay v0.3.0
-	github.com/go-filesystems/rar v0.2.0
+	github.com/go-filesystems/rar v0.3.0
 	github.com/go-filesystems/rpm v0.3.0
 	github.com/go-filesystems/sevenzip v0.3.0
 	github.com/go-filesystems/squashfs v0.4.0
 	github.com/go-filesystems/warc v0.2.0
-	github.com/go-filesystems/xar v0.2.0
+	github.com/go-filesystems/xar v0.3.0
 	github.com/klauspost/compress v1.20.3
 	github.com/pierrec/lz4/v4 v4.1.33
 	github.com/ulikunitz/xz v0.5.17
@@ -36,7 +36,7 @@ require (
 	github.com/go-compressions/lzfse v0.4.1 // indirect
 	github.com/go-volumes/safeio v0.0.0-20260831125406-d8f54b2890d4 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/nwaples/rardecode/v2 v2.4.1 // indirect
+	github.com/nwaples/rardecode/v2 v2.4.5 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/stangelandcl/ppmd v0.1.1 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect

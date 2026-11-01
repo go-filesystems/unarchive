@@ -121,7 +121,22 @@ func posixMode(m os.FileMode) uint16 {
 	}
 }
 
-func (w *fsWrap) ReadFile(p string) ([]byte, error) { return iofs.ReadFile(w.fsys, w.name(p)) }
+// ReadFile is io/fs.ReadFile with the entry's declared size bounded: that function
+// reserves the size from Stat before reading, and a zip header is free to declare
+// anything. See Limits.MaxReadFile.
+func (w *fsWrap) ReadFile(p string) ([]byte, error) {
+	name := w.name(p)
+	f, err := w.fsys.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	return readBounded(f, st.Size(), DefaultLimits.resolved().MaxReadFile, name)
+}
 
 func (w *fsWrap) ReadLink(p string) (string, error) {
 	if rl, ok := w.fsys.(iofs.ReadLinkFS); ok {
