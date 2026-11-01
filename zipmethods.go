@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
@@ -57,7 +58,7 @@ func registerZipMethods(register func(uint16, zip.Decompressor)) {
 	})
 	register(zipMethodZstd, func(r io.Reader) io.ReadCloser {
 		return errReadCloser(func() (io.Reader, error) {
-			z, err := zstd.NewReader(r)
+			z, err := zstd.NewReader(r, zstdWindowLimit())
 			if err != nil {
 				return nil, err
 			}
@@ -148,8 +149,10 @@ func newZipLZMA(r io.Reader) (io.Reader, error) {
 	for i := range size {
 		size[i] = 0xFF // unknown: stop at the end marker
 	}
-	return lzma.NewReader(io.MultiReader(
-		newByteReader(props), newByteReader(size[:]), r))
+	// DictCap is a LIMIT on the dictionary the header names (xz lzma/reader.go:133)
+	// and the default is 2 GiB: a nine-byte header asked for 1 GiB and got it.
+	return lzma.ReaderConfig{DictCap: int(min(DefaultLimits.resolved().MaxDictionary, math.MaxInt32))}.NewReader(
+		io.MultiReader(newByteReader(props), newByteReader(size[:]), r))
 }
 
 // newByteReader is bytes.NewReader without the import, kept next to its only use.

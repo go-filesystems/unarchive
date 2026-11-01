@@ -58,7 +58,7 @@ func decompressor(f Format, r io.Reader) (io.Reader, func() error, error) {
 		}
 		return z, nothing, nil
 	case FormatZstd:
-		z, err := zstd.NewReader(r)
+		z, err := zstd.NewReader(r, zstdWindowLimit())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -185,7 +185,13 @@ func openCompressed(path string, format Format, depth int) (filesystem.Filesyste
 		os.RemoveAll(dir)
 		return nil, format, err
 	}
-	_, copyErr := io.Copy(out, zr)
+	// Bounded: a few hundred bytes of .gz decompress to as much disk as there is.
+	// One byte past the limit tells a stream that went over; see Limits.MaxSpool.
+	maxSpool := DefaultLimits.resolved().MaxSpool
+	spooled, copyErr := io.Copy(out, io.LimitReader(zr, maxSpool+1))
+	if copyErr == nil && spooled > maxSpool {
+		copyErr = fmt.Errorf("decompresses to more than %d bytes: %w", maxSpool, ErrTooLarge)
+	}
 	closeErr := out.Close()
 	if err := closeZ(); err != nil && copyErr == nil {
 		copyErr = err
