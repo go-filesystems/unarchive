@@ -369,7 +369,9 @@ func TestBombZipLZMADictionary(t *testing.T) {
 	withLimits(t, Limits{MaxDictionary: 1 << 20})
 	var err error
 	n := allocated(func() { _, err = newZipLZMA(bytes.NewReader(head(1 << 30))) })
-	over := func(err error) bool { return err != nil && strings.Contains(err.Error(), "exceeds configured dictionary") }
+	over := func(err error) bool {
+		return err != nil && strings.Contains(err.Error(), "exceeds configured dictionary")
+	}
 	if !over(err) {
 		t.Fatalf("a 1 GiB dictionary must be refused as too large: %v", err)
 	}
