@@ -13,7 +13,7 @@ require (
 	github.com/go-filesystems/cab v0.3.0
 	github.com/go-filesystems/cpio v0.8.0
 	github.com/go-filesystems/detect v0.5.1
-	github.com/go-filesystems/hfsplus v0.5.0
+	github.com/go-filesystems/hfsplus v0.6.0
 	github.com/go-filesystems/interface v0.5.0
 	github.com/go-filesystems/iso9660 v0.5.0
 	github.com/go-filesystems/overlay v0.4.0
@@ -35,7 +35,7 @@ require (
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/go-compressions/adc v0.3.0 // indirect
 	github.com/go-compressions/lzfse v0.6.0 // indirect
-	github.com/go-volumes/safeio v0.0.0-20261011024942-5635ea21db3b // indirect
+	github.com/go-volumes/safeio v0.0.0-20261101001828-0e1734761f39 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/nwaples/rardecode/v2 v2.4.5 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
