@@ -201,7 +201,7 @@ func isTarSparse(h *tar.Header) bool {
 func (f *tarFS) expandSparse(h *tar.Header, tr *tar.Reader) error {
 	p := tarClean(h.Name)
 	e := f.byPath[p]
-	if e == nil || e.dir {
+	if e == nil { // add indexes nothing for the root's own name
 		return nil
 	}
 	left := f.maxRead - f.sparseUsed

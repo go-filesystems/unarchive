@@ -5,15 +5,19 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 )
 
 // TestTarHardlinkToMissingTargetRefused: a hard link whose target is not an
 // earlier regular file is refused rather than turned into a dangling entry.
 func TestTarHardlinkToMissingTargetRefused(t *testing.T) {
-	for name, target := range map[string]string{"absent": "nope.txt", "directory": "d"} {
+	for name, target := range map[string]string{"absent": "nope.txt", "directory": "d", "symlink": "sym"} {
 		var b bytes.Buffer
 		tw := tar.NewWriter(&b)
+		if err := tw.WriteHeader(&tar.Header{Name: "sym", Typeflag: tar.TypeSymlink, Linkname: "elsewhere"}); err != nil {
+			t.Fatal(err)
+		}
 		if err := tw.WriteHeader(&tar.Header{Name: "d/", Typeflag: tar.TypeDir, Mode: 0o755}); err != nil {
 			t.Fatal(err)
 		}
@@ -102,8 +106,13 @@ func TestTarSparseTruncated(t *testing.T) {
 	raw := b.Bytes()
 	patchOldGNUSparse(raw[:512], 100, 5)
 	raw = raw[:512+3]
-	if _, err := openTar(bytes.NewReader(raw), int64(len(raw)), nil); err == nil {
+	_, err := openTar(bytes.NewReader(raw), int64(len(raw)), nil)
+	if err == nil {
 		t.Fatal("a truncated sparse entry was accepted")
+	}
+	// The error must come from expanding THIS entry, not from reading the header.
+	if !strings.Contains(err.Error(), `sparse entry "s"`) {
+		t.Fatalf("err = %v, want it to name the sparse entry", err)
 	}
 }
 
@@ -167,4 +176,19 @@ func rawTarHeader(name string, typeflag byte, size int) []byte {
 	}
 	copy(h[148:156], fmt.Sprintf("%06o\x00 ", sum))
 	return h
+}
+
+// TestTarSparseUnnamedEntry: a sparse header naming the archive root indexes
+// nothing, and must not be dereferenced.
+func TestTarSparseUnnamedEntry(t *testing.T) {
+	var b bytes.Buffer
+	h := rawTarHeader(".", 'S', 5)
+	copy(h[257:], "ustar  \x00") // the GNU magic; 'S' is not a ustar typeflag
+	patchOldGNUSparse(h, 5, 5)
+	b.Write(h)
+	b.WriteString("HELLO")
+	b.Write(make([]byte, 507+1024))
+	if _, err := openTar(bytes.NewReader(b.Bytes()), int64(b.Len()), nil); err != nil {
+		t.Fatal(err)
+	}
 }
