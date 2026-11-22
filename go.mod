@@ -19,7 +19,7 @@ require (
 	github.com/go-filesystems/overlay v0.4.0
 	github.com/go-filesystems/rar v0.3.0
 	github.com/go-filesystems/rpm v0.5.0
-	github.com/go-filesystems/sevenzip v0.3.0
+	github.com/go-filesystems/sevenzip v0.3.1
 	github.com/go-filesystems/squashfs v0.9.2
 	github.com/go-filesystems/warc v0.3.0
 	github.com/go-filesystems/xar v0.3.0

@@ -51,8 +51,8 @@ github.com/go-filesystems/rar v0.3.0 h1:KWJkKmALYdWTGjttEBMKVWxBfaUO6bIHuywDvaqy
 github.com/go-filesystems/rar v0.3.0/go.mod h1:BmI4k3DE9sDQL+MpjdiFJhPBmIkIRWO7DBxxJm5WSTM=
 github.com/go-filesystems/rpm v0.5.0 h1:t7eQx8fXLFbNfNBn675BRbXpxZeSVF9iluLqNkCrLqU=
 github.com/go-filesystems/rpm v0.5.0/go.mod h1:+YeosgQnKiWH2JQkU29wTFjDKU88kBrg3vvZwFKhusM=
-github.com/go-filesystems/sevenzip v0.3.0 h1:+yjV2vjUofN+QrKKb6wwmAiborwC8jafGzXnQzLIFA0=
-github.com/go-filesystems/sevenzip v0.3.0/go.mod h1:cP52crZPdh8C3an+l7PB0WtY2UVYepLXjJ+D5i+vUk0=
+github.com/go-filesystems/sevenzip v0.3.1 h1:yK/mwFnqpouLntaaiPpY17fA1fDcQl8WCovplh3sGEQ=
+github.com/go-filesystems/sevenzip v0.3.1/go.mod h1:g18hbh1sT5bXBDvxYvnq9JVRK5YFPwvIDD5epEdsfxk=
 github.com/go-filesystems/squashfs v0.9.2 h1:ghePITASmX2lQk58MSy2CcKIDYcqPWrEywNWYvPZS54=
 github.com/go-filesystems/squashfs v0.9.2/go.mod h1:3/RVRULzCB+rTFpD4MMdLQutS4E4kVSA7alx1IkZpK4=
 github.com/go-filesystems/warc v0.3.0 h1:Fp1kH92lrsQ67JibqhLTtDFgA0Xv1WYqvRk5UMDNhGU=
