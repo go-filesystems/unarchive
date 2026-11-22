@@ -5,6 +5,7 @@ package unarchive
 
 import (
 	"archive/tar"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -46,6 +47,11 @@ func openTar(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesyste
 		if err := fs.add(h, counter.n); err != nil {
 			return nil, err
 		}
+		if isTarSparse(h) {
+			if err := fs.expandSparse(h, tr); err != nil {
+				return nil, err
+			}
+		}
 	}
 	// Refused HERE rather than at extraction, because extraction cannot see it:
 	// see refuseNestingUnderANonDirectory.
@@ -79,6 +85,7 @@ type tarEntry struct {
 	offset     int64
 	mode       uint16
 	linkTarget string
+	data       []byte // an expanded sparse entry, which is not a section of the archive
 }
 
 type tarFS struct {
@@ -89,6 +96,8 @@ type tarFS struct {
 
 	budget  *indexBudget
 	maxRead int64 // ReadFile's ceiling
+
+	sparseUsed int64 // bytes of sparse entries expanded in memory so far
 }
 
 // add records one header and every directory above it that the tar did not
@@ -114,7 +123,7 @@ func (f *tarFS) add(h *tar.Header, offset int64) error {
 		}
 	}
 	isDir := h.Typeflag == tar.TypeDir || strings.HasSuffix(h.Name, "/")
-	f.byPath[p] = &tarEntry{
+	ent := &tarEntry{
 		path:       p,
 		name:       path.Base(p),
 		dir:        isDir,
@@ -123,6 +132,24 @@ func (f *tarFS) add(h *tar.Header, offset int64) error {
 		mode:       posixMode(h.FileInfo().Mode()),
 		linkTarget: h.Linkname,
 	}
+	if h.Typeflag == tar.TypeLink {
+		// ⛔ A HARD link (typeflag '1') names another member of the archive and
+		// carries no data of its own. It was taken for a symbolic link, so it came
+		// out as a dangling symlink to a name relative to the link's own directory.
+		// It shares the target's data instead, which is what a hard link is.
+		// The target must precede it (tar writes the first name of an inode as a
+		// regular file and later names as links); one that does not is refused,
+		// not guessed at.
+		t, ok := f.byPath[tarClean(h.Linkname)]
+		if !ok || t.dir || t.linkTarget != "" {
+			return fmt.Errorf("hard link %q points to %q, which is not an earlier regular file of the archive: %w",
+				p, h.Linkname, ErrIncomplete)
+		}
+		ent.linkTarget = ""
+		ent.size, ent.offset, ent.data = t.size, t.offset, t.data
+		ent.mode = t.mode // one inode, one mode
+	}
+	f.byPath[p] = ent
 	if existed {
 		return nil // already linked, by an earlier header or as an implied directory
 	}
@@ -143,6 +170,54 @@ func (f *tarFS) add(h *tar.Header, offset int64) error {
 		}
 		child = parent
 	}
+}
+
+// isTarSparse says whether an entry is a GNU sparse file, old style (typeflag
+// 'S') or pax (GNU.sparse.* records).
+func isTarSparse(h *tar.Header) bool {
+	if h.Typeflag == tar.TypeGNUSparse {
+		return true
+	}
+	for k := range h.PAXRecords {
+		if strings.HasPrefix(k, "GNU.sparse.") {
+			return true
+		}
+	}
+	return false
+}
+
+// expandSparse materialises a sparse entry through archive/tar, which applies the
+// sparse map.
+//
+// ⛔ The header's Size of such an entry is its EXPANDED size, but the archive
+// stores only the data runs, so serving a section of Size bytes at the data
+// offset ran into the NEXT member and reported its bytes as this file's, with
+// Extract succeeding. Contiguous sections cannot express a hole, so the entry is
+// expanded once, here, and served from memory.
+//
+// The memory is bounded: an entry larger than Limits.MaxReadFile is refused with
+// ErrTooLarge (a sparse file may declare terabytes of hole), and so is an archive
+// whose sparse entries add up to more than that ceiling.
+func (f *tarFS) expandSparse(h *tar.Header, tr *tar.Reader) error {
+	p := tarClean(h.Name)
+	e := f.byPath[p]
+	if e == nil || e.dir {
+		return nil
+	}
+	left := f.maxRead - f.sparseUsed
+	if h.Size > left {
+		return fmt.Errorf("sparse entry %q expands to %d bytes, over the %d-byte limit: %w",
+			p, h.Size, f.maxRead, ErrTooLarge)
+	}
+	// archive/tar yields exactly h.Size bytes or an error (a short read is
+	// io.ErrUnexpectedEOF), so no length check is needed here.
+	data, err := io.ReadAll(tr)
+	if err != nil {
+		return fmt.Errorf("sparse entry %q: %w", p, err)
+	}
+	f.sparseUsed += h.Size
+	e.data = data
+	return nil
 }
 
 // tarClean normalises a tar's own spelling of a path.
@@ -245,6 +320,9 @@ func (f *tarFS) OpenFile(p string) (filesystem.File, error) {
 	}
 	if e.dir {
 		return nil, errors.New("unarchive: not a regular file")
+	}
+	if e.data != nil {
+		return &tarHandle{SectionReader: io.NewSectionReader(bytes.NewReader(e.data), 0, int64(len(e.data)))}, nil
 	}
 	return &tarHandle{SectionReader: io.NewSectionReader(f.ra, e.offset, e.size)}, nil
 }
