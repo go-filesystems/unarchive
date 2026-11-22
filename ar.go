@@ -90,7 +90,9 @@ func openAr(ra io.ReaderAt, size int64, closer io.Closer) (filesystem.Filesystem
 			continue
 		case strings.HasPrefix(name, "#1/"):
 			n, err := strconv.Atoi(name[3:])
-			if err != nil || int64(n) > msize {
+			// n is a signed decimal from the file: a negative one would reach
+			// make([]byte, n) and panic. n <= msize <= what remains in the file.
+			if err != nil || n < 0 || int64(n) > msize {
 				return nil, fmt.Errorf("ar: BSD long name at %d: %w", off, ErrUnknownFormat)
 			}
 			buf := make([]byte, n)
