@@ -339,6 +339,7 @@ per megabyte, never per byte).
 | entries `Extract` creates | `Options.MaxEntries` | 4,194,304 | `ErrTooLarge` |
 | depth `Extract` recurses to | `Options.MaxDepth` | 1024 | `ErrTooLarge` (a Go stack that runs out is fatal, not recoverable) |
 | paths an index holds (tar, ar, cpio) | `DefaultLimits.MaxEntries` | 1,048,576, directories included | `ErrTooLarge` |
+| a GNU sparse tar entry's expanded size, per entry and summed over the archive | `DefaultLimits.MaxReadFile` | 1 GiB | `ErrTooLarge`, when the archive is opened (holes are expanded in memory) |
 | one path | fixed | 4096 bytes | `ErrTooLarge` |
 | all paths of one index | fixed | 256 MiB | `ErrTooLarge` |
 | what `ReadFile` returns | `DefaultLimits.MaxReadFile` | 1 GiB | `ErrTooLarge`, before reserving; `Extract` and `OpenFile` stream |
