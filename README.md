@@ -27,9 +27,9 @@ unarchive -o disc.7z disc.iso     # yes, that works
 | RAR 1.5–4.x, RAR5 | ✅ read, ✅ write **stored** | multi-volume sets followed by volume **number**; a `.rar` written here carries no compression at all — see below |
 | ZIP | ✅ | including the jar/epub/odf family, and entries compressed with **bzip2, LZMA, xz or zstd** — not just deflate |
 | 7z | ✅ | follows its own `.001` chain, by name |
-| tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access, **symbolic links included** |
+| tar | ✅ | v7, USTAR, PAX and GNU alike, with real random access, **symbolic links included**; a **hard link** (typeflag `1`) shares its target's bytes (a target that is not an earlier regular file is refused); a **GNU sparse** entry (old `S` or pax `GNU.sparse.*`) is expanded in memory, holes as zeros, and refused with `ErrTooLarge` past `Limits.MaxReadFile` |
 | ar | ✅ | static libraries **and `.deb`** — both long-name spellings, SysV and BSD |
-| cpio | ✅ | `newc`, `crc`, `odc` **and the old binary variant, both byte orders** — parsed by [`go-filesystems/cpio`](https://github.com/go-filesystems/cpio) |
+| cpio | ✅ | `newc`, `crc`, `odc` **and the old binary variant, both byte orders** — parsed by [`go-filesystems/cpio`](https://github.com/go-filesystems/cpio); hard links, whose data newc writes on the LAST name only, extract with their bytes on every name |
 | gzip, bzip2, xz, zstd, lz4 | ✅ | stream wrappers: `.tar.gz`, `.tgz`, `.tar.zst`, a lone `notes.txt.gz` … |
 | lzop `.lzo` | ✅ | likewise, through `go-compressions/lzo` — LZO1X, no compressor |
 | lzip `.lz` | ✅ | likewise, through `go-compressions/lzip` — LZMA in lzip's framing, not xz's |
