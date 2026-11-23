@@ -25,7 +25,18 @@ func TestTarHardlinkToMissingTargetRefused(t *testing.T) {
 			t.Fatal(err)
 		}
 		tw.Close()
-		if _, err := openTar(bytes.NewReader(b.Bytes()), int64(b.Len()), nil); !errors.Is(err, ErrIncomplete) {
+		// Without the guard the target is a nil entry: report the panic as a
+		// failed assertion, not as the end of the test binary.
+		err := func() (err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("panicked: %v", r)
+				}
+			}()
+			_, err = openTar(bytes.NewReader(b.Bytes()), int64(b.Len()), nil)
+			return err
+		}()
+		if !errors.Is(err, ErrIncomplete) {
 			t.Errorf("%s: err = %v, want ErrIncomplete", name, err)
 		}
 	}
@@ -188,6 +199,13 @@ func TestTarSparseUnnamedEntry(t *testing.T) {
 	b.Write(h)
 	b.WriteString("HELLO")
 	b.Write(make([]byte, 507+1024))
+	// A dereferenced nil entry is reported as a failed assertion, not as a
+	// panic that ends the test binary.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("opening a sparse entry named for the root panicked: %v", r)
+		}
+	}()
 	if _, err := openTar(bytes.NewReader(b.Bytes()), int64(b.Len()), nil); err != nil {
 		t.Fatal(err)
 	}
